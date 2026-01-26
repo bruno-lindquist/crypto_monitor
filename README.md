@@ -8,7 +8,7 @@ Um **sistema completo de monitoramento de preços de criptomoedas em tempo real*
 
 ## 📖 Índice
 
-1. [Para Iniciantes](#para-iniciantes)
+1. [O que é este projeto?](#inicio)
 2. [O que este Projeto Faz](#o-que-este-projeto-faz)
 3. [Tecnologias Utilizadas](#tecnologias-utilizadas)
 4. [Arquitetura do Sistema](#arquitetura-do-sistema)
@@ -23,7 +23,7 @@ Um **sistema completo de monitoramento de preços de criptomoedas em tempo real*
 
 ---
 
-## Para Iniciantes
+## Ínicio
 
 ### O que é este projeto?
 
@@ -39,43 +39,43 @@ Este é um **sistema web completo** (frontend e backend) que monitora preços de
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                    VOCÊ AQUI (seu navegador)                    │
-│                                                                   │
+│                                                                 │
 │  Frontend React + TypeScript                                    │
-│  (Exibe gráficos, cards, alertas)                              │
-│  http://localhost:3000                                         │
+│  (Exibe gráficos, cards, alertas)                               │
+│  http://localhost:3000                                          │
 └─────────────────────────────────────────────────────────────────┘
                               ↕
                          (INTERNET)
                               ↕
 ┌─────────────────────────────────────────────────────────────────┐
-│                  SERVIDOR BACKEND (computador)                   │
-│                                                                   │
-│  ┌──────────────────────────────────────────────────────────┐  │
-│  │  Django REST API                                         │  │
-│  │  (Recebe pedidos do frontend e devolve dados)           │  │
-│  │  http://localhost:8000/api/                             │  │
-│  └──────────────────────────────────────────────────────────┘  │
-│                              ↕                                   │
-│  ┌──────────────────────────────────────────────────────────┐  │
-│  │  PostgreSQL (Banco de Dados)                             │  │
-│  │  (Guarda todos os preços, alertas, usuários)            │  │
-│  └──────────────────────────────────────────────────────────┘  │
-│                                                                   │
-│  ┌──────────────────────────────────────────────────────────┐  │
-│  │  Celery Worker (Tarefas de Fundo)                        │  │
-│  │  (A cada 1 minuto busca preços da CoinGecko)            │  │
-│  │  (Verifica alertas, limpa dados antigos)                │  │
-│  └──────────────────────────────────────────────────────────┘  │
-│                              ↕                                   │
-│  ┌──────────────────────────────────────────────────────────┐  │
-│  │  RabbitMQ (Gerenciador de Filas)                         │  │
-│  │  (Coordena as tarefas de fundo)                          │  │
-│  └──────────────────────────────────────────────────────────┘  │
-│                              ↕                                   │
-│  ┌──────────────────────────────────────────────────────────┐  │
-│  │  CoinGecko API (Externo)                                 │  │
-│  │  (Fonte dos preços em tempo real)                        │  │
-│  └──────────────────────────────────────────────────────────┘  │
+│                  SERVIDOR BACKEND (computador)                  │
+│                                                                 │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │  Django REST API                                         │   │
+│  │  (Recebe pedidos do frontend e devolve dados)            │   │
+│  │  http://localhost:8000/api/                              │   │
+│  └──────────────────────────────────────────────────────────┘   │
+│                              ↕                                  │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │  PostgreSQL (Banco de Dados)                             │   │
+│  │  (Guarda todos os preços, alertas, usuários)             │   │
+│  └──────────────────────────────────────────────────────────┘   │
+│                                                                 │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │  Celery Worker (Tarefas de Fundo)                        │   │
+│  │  (A cada 1 minuto busca preços da CoinGecko)             │   │
+│  │  (Verifica alertas, limpa dados antigos)                 │   │
+│  └──────────────────────────────────────────────────────────┘   │
+│                              ↕                                  │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │  RabbitMQ (Gerenciador de Filas)                         │   │
+│  │  (Coordena as tarefas de fundo)                          │   │
+│  └──────────────────────────────────────────────────────────┘   │
+│                              ↕                                  │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │  CoinGecko API (Externo)                                 │   │
+│  │  (Fonte dos preços em tempo real)                        │   │
+│  └──────────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -564,14 +564,14 @@ Representa uma moeda que estamos monitorando.
 ╔═══════════════════════════════════╗
 ║       Cryptocurrency              ║
 ╠═══════════════════════════════════╣
-║ id (chave primária)              ║
-║ symbol: "BTC", "ETH", etc        ║
-║ name: "Bitcoin", "Ethereum"      ║
-║ coingecko_id: "bitcoin"          ║
-║ image_url: URL da logo           ║
-║ is_active: true/false            ║
-║ created_at: quando foi criado    ║
-║ updated_at: última atualização   ║
+║ id (chave primária)               ║
+║ symbol: "BTC", "ETH", etc         ║
+║ name: "Bitcoin", "Ethereum"       ║
+║ coingecko_id: "bitcoin"           ║
+║ image_url: URL da logo            ║
+║ is_active: true/false             ║
+║ created_at: quando foi criado     ║
+║ updated_at: última atualização    ║
 ╚═══════════════════════════════════╝
 ```
 
@@ -583,16 +583,16 @@ Cada linha é um "snapshot" do preço de uma crypto em um momento.
 ╔═══════════════════════════════════╗
 ║       PriceHistory                ║
 ╠═══════════════════════════════════╣
-║ id (chave primária)              ║
-║ cryptocurrency_id (FK)           ║ → Qual crypto é?
-║ price_usd: 45000.50              ║
-║ price_brl: 234000.80             ║
-║ market_cap_usd: 1000000000000    ║
-║ volume_24h_usd: 50000000000      ║
-║ change_1h: -0.5%                 ║
-║ change_24h: +2.3%                ║
-║ change_7d: -10.2%                ║
-║ collected_at: 2026-01-26 13:45  ║ ← Quando foi coletado
+║ id (chave primária)               ║
+║ cryptocurrency_id (FK)            ║ → Qual crypto é?
+║ price_usd: 45000.50               ║
+║ price_brl: 234000.80              ║
+║ market_cap_usd: 1000000000000     ║
+║ volume_24h_usd: 50000000000       ║
+║ change_1h: -0.5%                  ║
+║ change_24h: +2.3%                 ║
+║ change_7d: -10.2%                 ║
+║ collected_at: 2026-01-26 13:45    ║ ← Quando foi coletado
 ╚═══════════════════════════════════╝
 ```
 
@@ -607,14 +607,14 @@ Um alerta que você cria.
 ╔═══════════════════════════════════╗
 ║       PriceAlert                  ║
 ╠═══════════════════════════════════╣
-║ id (chave primária)              ║
-║ cryptocurrency_id (FK)           ║ → Qual crypto?
-║ target_price: 50000              ║ → Em quanto?
-║ condition: "above" ou "below"    ║ → Acima ou abaixo?
-║ is_active: true/false            ║ → Está ligado?
-║ triggered: true/false            ║ → Já disparou?
-║ triggered_at: data/hora          ║ → Quando disparou?
-║ created_at: 2026-01-26          ║
+║ id (chave primária)               ║
+║ cryptocurrency_id (FK)            ║ → Qual crypto?
+║ target_price: 50000               ║ → Em quanto?
+║ condition: "above" ou "below"     ║ → Acima ou abaixo?
+║ is_active: true/false             ║ → Está ligado?
+║ triggered: true/false             ║ → Já disparou?
+║ triggered_at: data/hora           ║ → Quando disparou?
+║ created_at: 2026-01-26            ║
 ╚═══════════════════════════════════╝
 
 Exemplo:
@@ -630,12 +630,12 @@ Registro de cada coleta de preços (para auditoria).
 ╔═══════════════════════════════════╗
 ║       CollectionLog               ║
 ╠═══════════════════════════════════╣
-║ id (chave primária)              ║
-║ status: "success", "error"       ║
-║ processed_count: 20              ║ → Quantas criptos?
-║ duration: 2.5                    ║ → Quanto tempo?
-║ error_message: null ou texto     ║ → Houve erro?
-║ collected_at: 2026-01-26 13:45  ║
+║ id (chave primária)               ║
+║ status: "success", "error"        ║
+║ processed_count: 20               ║ → Quantas criptos?
+║ duration: 2.5                     ║ → Quanto tempo?
+║ error_message: null ou texto      ║ → Houve erro?
+║ collected_at: 2026-01-26 13:45    ║
 ╚═══════════════════════════════════╝
 ```
 
@@ -747,19 +747,19 @@ Celery executa tarefas em segundo plano, sem bloquear o servidor.
 └────────────────────────────────────┘
            ↓
 ┌─ Celery Worker ────────────────────┐
-│ Pega tarefa e executa             │
-│                                   │
-│ fetch_crypto_prices():            │
-│  1. Conecta em CoinGecko          │
-│  2. Busca preços de BTC, ETH...   │
-│  3. Salva no PostgreSQL           │
-│  4. Marca como concluída          │
-│                                   │
-│ check_price_alerts():             │
-│  1. Pega todos os alertas ativos  │
-│  2. Compara com preço atual       │
-│  3. Se atingiu alvo, dispara      │
-│  4. Envia notificação             │
+│ Pega tarefa e executa              │
+│                                    │
+│ fetch_crypto_prices():             │
+│  1. Conecta em CoinGecko           │
+│  2. Busca preços de BTC, ETH...    │
+│  3. Salva no PostgreSQL            │
+│  4. Marca como concluída           │
+│                                    │
+│ check_price_alerts():              │
+│  1. Pega todos os alertas ativos   │
+│  2. Compara com preço atual        │
+│  3. Se atingiu alvo, dispara       │
+│  4. Envia notificação              │
 └────────────────────────────────────┘
            ↓
 ┌─ PostgreSQL ───────────────────────┐
@@ -835,18 +835,6 @@ pytest -v
 
 ---
 
-## Próximas Melhorias
-
-- [ ] Gráficos com mais intervalos (1d, 1w, 1m, etc)
-- [ ] Comparação entre duas criptos
-- [ ] Exportar dados em CSV
-- [ ] Notificações por email quando alerta dispara
-- [ ] Suporte a mais de 20 criptomoedas
-- [ ] Testes E2E com Cypress
-- [ ] Deploy automático com GitHub Actions
-
----
-
 ## Dúvidas Frequentes
 
 **P: Por que preciso do RabbitMQ?**  
@@ -869,8 +857,3 @@ Projeto de estudos desenvolvido como exemplo de arquitetura full-stack moderna.
 
 **Tecnologias principais:** Python, Django, React, TypeScript, Docker, PostgreSQL, Celery
 
----
-
-## Licença
-
-MIT
