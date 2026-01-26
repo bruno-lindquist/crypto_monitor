@@ -215,10 +215,14 @@ def _process_market_data(market_data: list[dict], crypto_map: dict) -> int:
             crypto.save(update_fields=["image_url"])
         
         # Create price history record
+        current_price = coin.get("current_price")
+        if current_price is None:
+            continue
+            
         prices_to_create.append(PriceHistory(
             cryptocurrency=crypto,
-            price_usd=Decimal(str(coin.get("current_price", 0))),
-            price_brl=Decimal(str(coin.get("current_price", 0) * 5.0)),  # Approximate BRL
+            price_usd=Decimal(str(current_price)),
+            price_brl=Decimal(str(current_price * 5.0)),  # Approximate BRL
             market_cap_usd=_safe_decimal(coin.get("market_cap")),
             volume_24h_usd=_safe_decimal(coin.get("total_volume")),
             change_1h=_safe_decimal(coin.get("price_change_percentage_1h_in_currency")),
