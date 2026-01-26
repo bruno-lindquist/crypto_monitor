@@ -10,8 +10,10 @@ export function formatPrice(
   currency: 'USD' | 'BRL' = 'USD',
   compact: boolean = false
 ): string {
+  const locale = currency === 'BRL' ? 'pt-BR' : 'en-US'
+  
   if (compact && value >= 1000) {
-    return new Intl.NumberFormat('en-US', {
+    return new Intl.NumberFormat(locale, {
       notation: 'compact',
       maximumFractionDigits: 2,
     }).format(value)
@@ -28,7 +30,7 @@ export function formatPrice(
   }
 
   // For regular values
-  return new Intl.NumberFormat('en-US', {
+  return new Intl.NumberFormat(locale, {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }).format(value)

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { 
   ArrowLeft, 
@@ -38,19 +38,7 @@ export default function CryptoDetail() {
     { value: 168, label: '7D' },
   ]
 
-  useEffect(() => {
-    if (id) {
-      loadCryptoData(parseInt(id))
-    }
-  }, [id])
-
-  useEffect(() => {
-    if (id) {
-      loadPriceHistory(parseInt(id), selectedRange)
-    }
-  }, [id, selectedRange])
-
-  const loadCryptoData = async (cryptoId: number) => {
+  const loadCryptoData = useCallback(async (cryptoId: number) => {
     try {
       const data = await cryptoApi.get(cryptoId)
       setCrypto(data)
@@ -60,16 +48,28 @@ export default function CryptoDetail() {
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [navigate])
 
-  const loadPriceHistory = async (cryptoId: number, hours: number) => {
+  const loadPriceHistory = useCallback(async (cryptoId: number, hours: number) => {
     try {
       const data = await cryptoApi.getHistory(cryptoId, hours)
       setPriceHistory(data)
     } catch (err) {
       console.error('Error loading price history:', err)
     }
-  }
+  }, [])
+
+  useEffect(() => {
+    if (id) {
+      loadCryptoData(parseInt(id))
+    }
+  }, [id, loadCryptoData])
+
+  useEffect(() => {
+    if (id) {
+      loadPriceHistory(parseInt(id), selectedRange)
+    }
+  }, [id, selectedRange, loadPriceHistory])
 
   const handleRefresh = async () => {
     if (!id) return
