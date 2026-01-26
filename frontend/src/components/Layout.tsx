@@ -1,4 +1,4 @@
-import { Outlet, NavLink } from 'react-router-dom'
+import { Outlet, NavLink, Link } from 'react-router-dom'
 import { 
   LayoutDashboard, 
   Coins, 
@@ -21,15 +21,15 @@ export default function Layout() {
       <header className="bg-crypto-dark border-b border-slate-800">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
-            {/* Logo */}
-            <div className="flex items-center gap-3">
+            {/* Logo - Clickable to go home */}
+            <Link to="/" className="flex items-center gap-3 hover:opacity-80 transition-opacity">
               <div className="p-2 rounded-lg gradient-primary">
                 <TrendingUp className="w-6 h-6 text-white" />
               </div>
               <span className="text-xl font-bold text-white">
                 Crypto Monitor
               </span>
-            </div>
+            </Link>
 
             {/* Navigation */}
             <nav className="hidden md:flex items-center gap-1">
@@ -54,7 +54,7 @@ export default function Layout() {
 
             {/* GitHub Link */}
             <a
-              href="https://github.com"
+              href="https://github.com/bruno-lindquist/crypto_monitor"
               target="_blank"
               rel="noopener noreferrer"
               className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
