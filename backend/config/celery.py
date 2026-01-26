@@ -21,20 +21,17 @@ app.autodiscover_tasks()
 
 # Celery Beat Schedule - Periodic Tasks
 app.conf.beat_schedule = {
-    "fetch-crypto-prices-every-5-minutes": {
+    "fetch-crypto-prices-every-minute": {
         "task": "core.tasks.fetch_crypto_prices",
-        "schedule": crontab(minute="*/5"),  # Every 5 minutes
-        "options": {"queue": "default"},
+        "schedule": 60.0,  # Every 60 seconds
     },
     "check-price-alerts-every-minute": {
         "task": "core.tasks.check_price_alerts",
-        "schedule": crontab(minute="*"),  # Every minute
-        "options": {"queue": "default"},
+        "schedule": 60.0,  # Every 60 seconds
     },
     "cleanup-old-price-history-daily": {
         "task": "core.tasks.cleanup_old_price_history",
         "schedule": crontab(hour=3, minute=0),  # Daily at 3 AM
-        "options": {"queue": "default"},
     },
 }
 
