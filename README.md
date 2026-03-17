@@ -1,19 +1,17 @@
 # Crypto Monitor
 
-Crypto Monitor is a full-stack web application for tracking cryptocurrency prices, storing price history, showing market summaries, and managing price alerts.
+## Overview
 
-The project has four main responsibilities:
+Crypto Monitor is a full-stack web application that monitors a predefined set of cryptocurrencies, stores current and historical market data in PostgreSQL, exposes a REST API for operational and market data, and provides a React interface for dashboards, coin details, and alert management.
 
-1. Collect cryptocurrency prices from CoinGecko on a schedule.
-2. Persist current and historical market data in PostgreSQL.
-3. Expose a REST API for dashboard, list, detail, history, alerts, and operational data.
-4. Provide a React frontend for browsing coins, viewing charts, and creating alerts.
+The system is organized into four layers:
 
-## What The Project Does
+- Frontend: React application that renders the UI and calls the API.
+- Backend API: Django REST application that exposes the project data and actions.
+- Background processing: Celery workers and beat scheduler for periodic tasks.
+- Persistence and messaging: PostgreSQL stores data and RabbitMQ brokers background jobs.
 
-The application monitors a predefined set of cryptocurrencies and keeps their market data updated over time.
-
-Main features:
+Main capabilities:
 
 - Dashboard with summary metrics and top gainers/losers.
 - Cryptocurrency list with search and latest price snapshot.
@@ -23,14 +21,59 @@ Main features:
 - Django Admin for operational management.
 - Scheduled background jobs for price collection, alert checking, and cleanup.
 
-## How The Project Is Organized
 
-The system is organized into four layers:
 
-- Frontend: React application that renders the UI and calls the API.
-- Backend API: Django REST application that exposes the project data and actions.
-- Background processing: Celery workers and beat scheduler for periodic tasks.
-- Persistence and messaging: PostgreSQL stores data and RabbitMQ brokers background jobs.
+
+## Installation
+
+### Docker Compose
+
+Requirements:
+
+- Docker Desktop or Docker Engine
+- Docker Compose
+
+Start the full stack:
+
+```bash
+docker compose up -d --build
+```
+
+Stop the stack:
+
+```bash
+docker compose down
+```
+
+## Accessing The Application
+
+After the stack is running, the default endpoints are:
+
+| Service | URL |
+|---|---|
+| Frontend | `http://localhost:3000` |
+| Backend API | `http://localhost:8000/api/` |
+| Django Admin | `http://localhost:8000/admin/` |
+| Health Check | `http://localhost:8000/health/` |
+| RabbitMQ Management | `http://localhost:15672` |
+
+Default RabbitMQ credentials:
+
+- Username: `guest`
+- Password: `guest`
+
+## Creating A Superuser
+
+```bash
+docker compose exec backend python manage.py createsuperuser
+```
+
+Then open:
+
+```text
+http://localhost:8000/admin/
+```
+
 
 
 ## Technology Stack
@@ -200,62 +243,18 @@ Main routes exposed by the backend:
 - `GET /health/` — service health check.
 - `GET /api/cryptos/` — list cryptocurrencies.
 - `GET /api/cryptos/{id}/` — get one cryptocurrency.
-- `POST /api/cryptos/{id}/refresh/` — request a manual price refresh.
+- `POST /api/cryptos/{id}/refresh/` — request a manual price refresh. Admin only.
 - `GET /api/cryptos/{id}/history/?hours=24` — get chart history for one cryptocurrency.
-- `GET /api/dashboard/` — dashboard summary metrics.
-- `GET/POST /api/alerts/` — list and create alerts.
-- `GET/PATCH/DELETE /api/alerts/{id}/` — manage a specific alert.
-- `POST /api/alerts/{id}/reset/` — reactivate a triggered alert.
+- `GET /api/dashboard/` — dashboard summary metrics. Alert counts are scoped to the current alert client token or admin session.
+- `GET/POST /api/alerts/` — list and create alerts. Anonymous clients must send `X-Alert-Client-Token`.
+- `GET/PATCH/DELETE /api/alerts/{id}/` — manage a specific alert. Requires the same `X-Alert-Client-Token` used when the alert was created, or admin access.
+- `POST /api/alerts/{id}/reset/` — reactivate a triggered alert. Requires the same `X-Alert-Client-Token` used when the alert was created, or admin access.
 - `GET /api/prices/` — generic price history endpoint.
-- `GET /api/logs/` — collection log endpoint for operational use.
-- `POST /api/fetch/` — manually trigger price collection.
+- `GET /api/logs/` — collection log endpoint for operational use. Admin only.
+- `POST /api/fetch/` — manually trigger price collection. Admin only.
 
-## Installation
+Alert ownership model:
 
-### Docker Compose
-
-Requirements:
-
-- Docker Desktop or Docker Engine
-- Docker Compose
-
-Start the full stack:
-
-```bash
-docker compose up -d --build
-```
-
-Stop the stack:
-
-```bash
-docker compose down
-```
-
-## Accessing The Application
-
-After the stack is running, the default endpoints are:
-
-| Service | URL |
-|---|---|
-| Frontend | `http://localhost:3000` |
-| Backend API | `http://localhost:8000/api/` |
-| Django Admin | `http://localhost:8000/admin/` |
-| Health Check | `http://localhost:8000/health/` |
-| RabbitMQ Management | `http://localhost:15672` |
-
-Default RabbitMQ credentials:
-
-- Username: `guest`
-- Password: `guest`
-
-## Creating A Superuser
-
-```bash
-docker compose exec backend python manage.py createsuperuser
-```
-
-Then open:
-
-```text
-http://localhost:8000/admin/
-```
+- The frontend creates a client token and stores it in the browser.
+- Anonymous alert reads and writes are scoped to that token through the `X-Alert-Client-Token` header.
+- Admin users can access all alerts without that header.
