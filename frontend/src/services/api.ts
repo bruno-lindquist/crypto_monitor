@@ -11,7 +11,6 @@ import type {
   DashboardStats,
   PaginatedResponse,
   CreateAlertData,
-  CollectionLog,
 } from '../types'
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/api'
@@ -72,9 +71,7 @@ export const cryptoApi = {
   },
 
   get: async (id: number) => {
-    const response = await api.get<Cryptocurrency & { price_history_24h: PriceHistory[] }>(
-      `/cryptos/${id}/`
-    )
+    const response = await api.get<Cryptocurrency>(`/cryptos/${id}/`)
     return response.data
   },
 
@@ -103,21 +100,6 @@ export const cryptoApi = {
     const response = await api.get<PriceHistory[]>(`/cryptos/${id}/history/`, {
       params: { hours },
     })
-    return response.data
-  },
-}
-
-/**
- * Price history endpoints
- */
-export const priceApi = {
-  list: async (params?: { crypto?: number; symbol?: string; hours?: number; limit?: number }) => {
-    const response = await api.get<PaginatedResponse<PriceHistory>>('/prices/', { params })
-    return response.data
-  },
-
-  get: async (id: number) => {
-    const response = await api.get<PriceHistory>(`/prices/${id}/`)
     return response.data
   },
 }
@@ -184,16 +166,6 @@ export const dashboardApi = {
 
   triggerFetch: async () => {
     const response = await api.post<{ message: string; task_id: string }>('/fetch/')
-    return response.data
-  },
-}
-
-/**
- * Logs endpoints
- */
-export const logsApi = {
-  list: async () => {
-    const response = await api.get<PaginatedResponse<CollectionLog>>('/logs/')
     return response.data
   },
 }

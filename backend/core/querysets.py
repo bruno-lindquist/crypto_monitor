@@ -1,10 +1,6 @@
-"""
-Queryset annotation helpers for performance-sensitive endpoints.
-"""
+"""Queryset annotation helpers for performance-sensitive endpoints."""
 
-from django.db.models import Count, OuterRef, Prefetch, Q, Subquery
-from django.utils import timezone
-from datetime import timedelta
+from django.db.models import OuterRef, Subquery
 
 from .models import PriceHistory
 
@@ -27,38 +23,6 @@ def annotate_cryptocurrencies_with_latest_price(queryset):
         ),
         latest_collected_at=Subquery(latest_price_queryset.values("collected_at")[:1]),
     )
-
-
-def annotate_cryptocurrencies_with_alert_counts(queryset):
-    return queryset.annotate(
-        active_alerts_count=Count(
-            "alerts",
-            filter=Q(alerts__is_active=True, alerts__is_triggered=False),
-            distinct=True,
-        ),
-        triggered_alerts_count=Count(
-            "alerts",
-            filter=Q(alerts__is_triggered=True),
-            distinct=True,
-        ),
-    )
-
-
-def prefetch_cryptocurrency_history_24h(queryset):
-    since = timezone.now() - timedelta(hours=24)
-    history_queryset = PriceHistory.objects.filter(
-        collected_at__gte=since
-    ).order_by("collected_at")
-
-    return queryset.prefetch_related(
-        Prefetch(
-            "price_history",
-            queryset=history_queryset,
-            to_attr="prefetched_price_history_24h",
-        )
-    )
-
-
 def annotate_alerts_with_current_price(queryset):
     latest_price_queryset = PriceHistory.objects.filter(
         cryptocurrency_id=OuterRef("cryptocurrency_id")

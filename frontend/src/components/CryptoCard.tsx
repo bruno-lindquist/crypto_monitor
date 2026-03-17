@@ -1,7 +1,7 @@
 import { TrendingUp, TrendingDown, Minus } from 'lucide-react'
 import clsx from 'clsx'
 import type { Cryptocurrency } from '../types'
-import { formatPrice, formatPercent } from '../utils/format'
+import { formatLatestBrlPrice, formatLatestUsdPrice, formatPercent } from '../utils/format'
 
 interface CryptoCardProps {
   crypto: Cryptocurrency
@@ -11,7 +11,6 @@ interface CryptoCardProps {
 export default function CryptoCard({ crypto, onClick }: CryptoCardProps) {
   const price = crypto.latest_price
   const change24h = price?.change_24h ? parseFloat(price.change_24h) : null
-  const hasReliableBrlPrice = Boolean(price?.price_brl) && !price?.is_brl_estimated
 
   const isPositive = change24h !== null && change24h > 0
   const isNegative = change24h !== null && change24h < 0
@@ -65,12 +64,10 @@ export default function CryptoCard({ crypto, onClick }: CryptoCardProps) {
 
       <div className="space-y-1">
         <p className="text-2xl font-bold text-white">
-          {price ? formatPrice(parseFloat(price.price_usd)) : '-'}
+          {formatLatestUsdPrice(price)}
         </p>
         <p className="text-sm text-slate-400">
-          {price && hasReliableBrlPrice && price.price_brl
-            ? `R$ ${formatPrice(parseFloat(price.price_brl), 'BRL')}`
-            : 'BRL indisponível'}
+          {formatLatestBrlPrice(price)}
         </p>
       </div>
     </div>

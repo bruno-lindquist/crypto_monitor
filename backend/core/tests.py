@@ -256,6 +256,8 @@ class TestAPIEndpoints:
         data = response.json()
         assert data["symbol"] == "BTC"
         assert data["latest_price"] is not None
+        assert "price_history_24h" not in data
+        assert "alerts_count" not in data
 
     def test_list_cryptocurrencies_avoids_n_plus_one_queries(
         self,

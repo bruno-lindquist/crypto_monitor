@@ -19,9 +19,7 @@ from .access import filter_alerts_for_request, get_alert_token_hash_for_request
 from .models import Cryptocurrency, PriceHistory, PriceAlert, CollectionLog
 from .querysets import (
     annotate_alerts_with_current_price,
-    annotate_cryptocurrencies_with_alert_counts,
     annotate_cryptocurrencies_with_latest_price,
-    prefetch_cryptocurrency_history_24h,
 )
 from .serializers import (
     CryptocurrencyListSerializer,
@@ -96,10 +94,6 @@ class CryptocurrencyViewSet(viewsets.ModelViewSet):
                 models.Q(name__icontains=search)
             )
         
-        if self.action == "retrieve":
-            queryset = annotate_cryptocurrencies_with_alert_counts(queryset)
-            queryset = prefetch_cryptocurrency_history_24h(queryset)
-
         return queryset.order_by("symbol")
     
     @action(detail=True, methods=["post"])

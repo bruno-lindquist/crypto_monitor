@@ -303,7 +303,7 @@ npm install
 npm run dev
 ```
 
-O frontend rodará em: http://localhost:5173
+O frontend rodará em: http://localhost:3000
 
 ---
 
@@ -374,7 +374,7 @@ npm install
 npm run dev
 ```
 
-O frontend rodará em: http://localhost:5173
+O frontend rodará em: http://localhost:3000
 
 ---
 
@@ -426,8 +426,6 @@ crypto_monitor/
 ├── docker-compose.yml              # Inicia tudo em desenvolvimento
 ├── docker-compose.prod.yml         # Versão para produção
 ├── README.md                        # Este arquivo
-├── _bkp_sql/                        # Backup do banco de dados
-│   └── crypto_monitor_*.sql
 ├── backend/                         # Servidor Django
 └── frontend/                        # Interface React
 ```
@@ -486,7 +484,6 @@ core/
 backend/
 ├── manage.py                    # Script principal do Django
 ├── requirements.txt             # Lista de dependências Python
-├── conftest.py                  # Configuração de testes
 ├── pytest.ini                   # Opções do pytest
 └── Dockerfile                   # Cria imagem Docker do backend
 ```
@@ -528,9 +525,10 @@ src/
 ├── services/
 │   └── api.ts                   # Cliente HTTP (faz requisições à API)
 ├── hooks/
-│   └── useFetch.ts              # Hook customizado para buscar e recarregar dados
+│   └── useFetch.ts              # Hook para carregar dados com loading/erro
 ├── utils/
-│   └── format.ts                # Funções auxiliares (formatar preço, data)
+│   ├── format.ts                # Funções auxiliares de formatação
+│   └── poll.ts                  # Polling assíncrono reutilizável
 ├── components/                  # Componentes reutilizáveis
 │   ├── Layout.tsx               # Header e navegação
 │   ├── CryptoCard.tsx           # Card com info de 1 crypto
@@ -548,7 +546,7 @@ src/
 **Entendendo:**
 
 - `App.tsx`: Define as rotas (URL `/` → Dashboard, URL `/cryptos` → CryptoList)
-- `services/api.ts`: Funções que fazem `fetch('http://localhost:8000/api/cryptos')`
+- `services/api.ts`: Cliente HTTP centralizado para as chamadas da API
 - `pages/`: Cada arquivo é uma página da web
 - `components/`: Blocos reutilizáveis (um card pode aparecer em vários lugares)
 
@@ -856,4 +854,3 @@ R: Com Docker, você pode rodar múltiplos workers Celery, múltiplas instância
 Projeto de estudos desenvolvido como exemplo de arquitetura full-stack moderna.
 
 **Tecnologias principais:** Python, Django, React, TypeScript, Docker, PostgreSQL, Celery
-

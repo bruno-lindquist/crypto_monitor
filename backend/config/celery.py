@@ -34,8 +34,3 @@ app.conf.beat_schedule = {
         "schedule": crontab(hour=3, minute=0),  # Daily at 3 AM
     },
 }
-
-
-@app.task(bind=True, ignore_result=True)
-def debug_task(self):
-    print(f"Request: {self.request!r}")

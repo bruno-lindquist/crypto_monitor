@@ -90,7 +90,6 @@ class CollectionLogAdmin(admin.ModelAdmin):
         "completed_at",
         "status",
         "cryptos_processed",
-        "cryptos_failed",
         "execution_time_ms",
     ]
     list_filter = ["status", "started_at"]
@@ -100,7 +99,6 @@ class CollectionLogAdmin(admin.ModelAdmin):
         "completed_at",
         "status",
         "cryptos_processed",
-        "cryptos_failed",
         "error_message",
         "execution_time_ms",
     ]

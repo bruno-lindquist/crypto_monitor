@@ -14,19 +14,18 @@ import PriceChart from '../components/PriceChart'
 import AlertForm from '../components/AlertForm'
 import { PageLoader } from '../components/LoadingSpinner'
 import { cryptoApi, alertApi } from '../services/api'
-import { formatPrice, formatPercent, formatCompact, formatDateTime } from '../utils/format'
+import {
+  formatCompact,
+  formatDateTime,
+  formatLatestBrlPrice,
+  formatLatestUsdPrice,
+  formatPercent,
+} from '../utils/format'
+import { pollUntil } from '../utils/poll'
 import type { Cryptocurrency, PriceHistory, CreateAlertData } from '../types'
 
 type TimeRange = 1 | 6 | 24 | 48 | 168
 const ENABLE_MANUAL_REFRESH = import.meta.env.VITE_ENABLE_MANUAL_REFRESH === 'true'
-const REFRESH_POLL_INTERVAL_MS = 2000
-const MAX_REFRESH_POLLS = 15
-
-function delay(ms: number) {
-  return new Promise((resolve) => {
-    window.setTimeout(resolve, ms)
-  })
-}
 
 export default function CryptoDetail() {
   const { id } = useParams<{ id: string }>()
@@ -80,18 +79,13 @@ export default function CryptoDetail() {
 
   const waitForFreshPrice = useCallback(
     async (cryptoId: number, previousCollectedAt: string | null, hours: number) => {
-      for (let attempt = 0; attempt < MAX_REFRESH_POLLS; attempt += 1) {
-        await delay(REFRESH_POLL_INTERVAL_MS)
-        const updatedCrypto = await refreshDisplayedData(cryptoId, hours)
-        const updatedCollectedAt = updatedCrypto.latest_price?.collected_at ?? null
-
-        if (
-          updatedCollectedAt !== null &&
-          updatedCollectedAt !== previousCollectedAt
-        ) {
-          return
-        }
-      }
+      await pollUntil({
+        poll: () => refreshDisplayedData(cryptoId, hours),
+        isComplete: (updatedCrypto) => {
+          const updatedCollectedAt = updatedCrypto.latest_price?.collected_at ?? null
+          return updatedCollectedAt !== null && updatedCollectedAt !== previousCollectedAt
+        },
+      })
     },
     [refreshDisplayedData]
   )
@@ -135,7 +129,6 @@ export default function CryptoDetail() {
   const price = crypto.latest_price
   const change24h = price?.change_24h ? parseFloat(price.change_24h) : null
   const isPositive = change24h !== null && change24h >= 0
-  const hasReliableBrlPrice = Boolean(price?.price_brl) && !price?.is_brl_estimated
 
   return (
     <div className="space-y-6">
@@ -199,7 +192,7 @@ export default function CryptoDetail() {
             <span className="text-sm">Preço USD</span>
           </div>
           <p className="text-2xl font-bold text-white">
-            ${price ? formatPrice(parseFloat(price.price_usd)) : '-'}
+            {formatLatestUsdPrice(price)}
           </p>
         </div>
 
@@ -209,9 +202,7 @@ export default function CryptoDetail() {
             <span className="text-sm">Preço BRL</span>
           </div>
           <p className="text-2xl font-bold text-white">
-            {price && hasReliableBrlPrice && price.price_brl
-              ? `R$ ${formatPrice(parseFloat(price.price_brl), 'BRL')}`
-              : 'Indisponível'}
+            {formatLatestBrlPrice(price, 'Indisponível')}
           </p>
         </div>
 

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useCallback, useDeferredValue, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Search, Plus } from 'lucide-react'
 import CryptoCard from '../components/CryptoCard'
@@ -13,15 +13,15 @@ export default function CryptoList() {
   const [searchQuery, setSearchQuery] = useState('')
   const [showAlertForm, setShowAlertForm] = useState(false)
   const [selectedCrypto, setSelectedCrypto] = useState<Cryptocurrency | undefined>()
-  const { data, isLoading, error } = useFetch(() => cryptoApi.list(), [])
+  const deferredSearchQuery = useDeferredValue(searchQuery)
+  const normalizedSearchQuery = deferredSearchQuery.trim()
+  const fetchCryptos = useCallback(
+    () => cryptoApi.list(normalizedSearchQuery ? { search: normalizedSearchQuery } : undefined),
+    [normalizedSearchQuery]
+  )
+  const { data, isLoading, error } = useFetch(fetchCryptos)
   const cryptos = data?.results ?? []
-  const filteredCryptos = searchQuery
-    ? cryptos.filter(
-        (crypto) =>
-          crypto.symbol.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          crypto.name.toLowerCase().includes(searchQuery.toLowerCase())
-      )
-    : cryptos
+  const totalCryptos = data?.count ?? cryptos.length
 
   const handleCreateAlert = async (data: CreateAlertData) => {
     await alertApi.create(data)
@@ -53,7 +53,7 @@ export default function CryptoList() {
         <div>
           <h1 className="text-2xl font-bold text-white">Criptomoedas</h1>
           <p className="text-slate-400 mt-1">
-            {cryptos.length} criptomoedas monitoradas
+            {normalizedSearchQuery ? `${totalCryptos} resultados` : `${totalCryptos} criptomoedas monitoradas`}
           </p>
         </div>
 
@@ -80,7 +80,7 @@ export default function CryptoList() {
 
       {/* Crypto Grid */}
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-        {filteredCryptos.map((crypto) => (
+        {cryptos.map((crypto) => (
           <CryptoCard
             key={crypto.id}
             crypto={crypto}
@@ -89,10 +89,10 @@ export default function CryptoList() {
         ))}
       </div>
 
-      {filteredCryptos.length === 0 && (
+      {cryptos.length === 0 && (
         <div className="text-center py-12">
           <p className="text-slate-500">
-            {searchQuery
+            {normalizedSearchQuery
               ? 'Nenhuma criptomoeda encontrada'
               : 'Nenhuma criptomoeda cadastrada'}
           </p>

@@ -102,8 +102,3 @@ export default function PriceChart({
     </ResponsiveContainer>
   )
 }
-
-// Mini chart for cards (no axes)
-export function MiniPriceChart({ data }: { data: PriceHistory[] }) {
-  return <PriceChart data={data} height={60} showAxis={false} />
-}

@@ -6,8 +6,6 @@ to/from JSON for the REST API.
 """
 
 from rest_framework import serializers
-from django.utils import timezone
-from datetime import timedelta
 
 from .models import Cryptocurrency, PriceHistory, PriceAlert, CollectionLog
 
@@ -131,8 +129,6 @@ class CryptocurrencyDetailSerializer(serializers.ModelSerializer):
     """Detailed serializer for a single cryptocurrency."""
     
     latest_price = serializers.SerializerMethodField()
-    price_history_24h = serializers.SerializerMethodField()
-    alerts_count = serializers.SerializerMethodField()
     
     class Meta:
         model = Cryptocurrency
@@ -144,8 +140,6 @@ class CryptocurrencyDetailSerializer(serializers.ModelSerializer):
             "image_url",
             "is_active",
             "latest_price",
-            "price_history_24h",
-            "alerts_count",
             "created_at",
             "updated_at",
         ]
@@ -155,27 +149,6 @@ class CryptocurrencyDetailSerializer(serializers.ModelSerializer):
         if latest:
             return LatestPriceSerializer(latest).data
         return None
-    
-    def get_price_history_24h(self, obj):
-        """Returns price history for the last 24 hours."""
-        history = getattr(obj, "prefetched_price_history_24h", None)
-        if history is None:
-            since = timezone.now() - timedelta(hours=24)
-            history = obj.price_history.filter(
-                collected_at__gte=since
-            ).order_by("collected_at")
-        return PriceHistorySerializer(history, many=True).data
-    
-    def get_alerts_count(self, obj):
-        if hasattr(obj, "active_alerts_count") and hasattr(obj, "triggered_alerts_count"):
-            return {
-                "active": obj.active_alerts_count,
-                "triggered": obj.triggered_alerts_count,
-            }
-        return {
-            "active": obj.alerts.filter(is_active=True, is_triggered=False).count(),
-            "triggered": obj.alerts.filter(is_triggered=True).count(),
-        }
 
 
 class CryptocurrencyCreateSerializer(serializers.ModelSerializer):
@@ -274,7 +247,6 @@ class CollectionLogSerializer(serializers.ModelSerializer):
             "completed_at",
             "status",
             "cryptos_processed",
-            "cryptos_failed",
             "error_message",
             "execution_time_ms",
         ]

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import { 
   Bell, 
   Plus, 
@@ -22,7 +22,7 @@ type FilterType = 'all' | 'active' | 'triggered'
 export default function Alerts() {
   const [filter, setFilter] = useState<FilterType>('all')
   const [showAlertForm, setShowAlertForm] = useState(false)
-  const { data, isLoading, error, refetch } = useFetch(async () => {
+  const fetchAlertsPage = useCallback(async () => {
     const [alertsData, cryptosData] = await Promise.all([
       alertApi.list(),
       cryptoApi.list(),
@@ -32,6 +32,7 @@ export default function Alerts() {
       cryptos: cryptosData.results,
     }
   }, [])
+  const { data, isLoading, error, refetch } = useFetch(fetchAlertsPage)
   const alerts = data?.alerts ?? []
   const cryptos = data?.cryptos ?? []
 

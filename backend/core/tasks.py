@@ -105,19 +105,6 @@ class CoinGeckoClient:
         response.raise_for_status()
         return response.json()
     
-    def get_coin_list(self) -> list[dict]:
-        """
-        Fetch list of all available coins.
-        
-        Returns:
-            List of coin dicts with id, symbol, name
-        """
-        url = f"{self.base_url}/coins/list"
-        response = self.session.get(url, timeout=REQUEST_TIMEOUT)
-        response.raise_for_status()
-        return response.json()
-
-
 @shared_task(
     bind=True,
     autoretry_for=(requests.RequestException,),
@@ -404,21 +391,3 @@ def cleanup_old_price_history(self, days_to_keep: int = 30):
     
     logger.info(f"Cleaned up {deleted_count} old price history records")
     return f"Deleted {deleted_count} records"
-
-
-@shared_task(bind=True)
-def sync_coin_list(self):
-    """
-    Sync available coins from CoinGecko.
-    
-    This can be used to discover new coins or update existing ones.
-    """
-    client = CoinGeckoClient()
-    
-    try:
-        coins = client.get_coin_list()
-        logger.info(f"Found {len(coins)} coins on CoinGecko")
-        return f"Found {len(coins)} coins"
-    except requests.RequestException as e:
-        logger.error(f"Error syncing coin list: {e}")
-        raise

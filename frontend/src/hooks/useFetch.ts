@@ -1,38 +1,30 @@
-import { useState, useEffect, useRef } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 
 /**
  * Custom hook for fetching data with loading and error states.
  */
-export function useFetch<T>(
-  fetchFn: () => Promise<T>,
-  deps: unknown[] = []
-) {
+export function useFetch<T>(fetchFn: () => Promise<T>) {
   const [data, setData] = useState<T | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<Error | null>(null)
-  const fetchFnRef = useRef(fetchFn)
-  
-  // Keep the ref updated
-  fetchFnRef.current = fetchFn
 
-  const fetch = async () => {
+  const fetch = useCallback(async () => {
     setIsLoading(true)
     setError(null)
 
     try {
-      const result = await fetchFnRef.current()
+      const result = await fetchFn()
       setData(result)
     } catch (err) {
       setError(err instanceof Error ? err : new Error('Unknown error'))
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [fetchFn])
 
   useEffect(() => {
-    fetch()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, deps)
+    void fetch()
+  }, [fetch])
 
   return { data, isLoading, error, refetch: fetch }
 }

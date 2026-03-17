@@ -57,9 +57,8 @@ export interface CollectionLog {
   id: number
   started_at: string
   completed_at: string | null
-  status: 'success' | 'partial' | 'failed'
+  status: 'success' | 'failed'
   cryptos_processed: number
-  cryptos_failed: number
   error_message: string
   execution_time_ms: number | null
 }

@@ -2,6 +2,8 @@
  * Formatting utilities for the Crypto Monitor application.
  */
 
+import type { LatestPrice } from '../types'
+
 /**
  * Format a number as currency.
  */
@@ -34,6 +36,31 @@ export function formatPrice(
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }).format(value)
+}
+
+export function hasReliableBrlPrice(price: LatestPrice | null | undefined): price is LatestPrice & {
+  price_brl: string
+} {
+  return Boolean(price?.price_brl) && !price?.is_brl_estimated
+}
+
+export function formatLatestUsdPrice(price: LatestPrice | null | undefined): string {
+  if (!price) {
+    return '-'
+  }
+
+  return `$${formatPrice(parseFloat(price.price_usd))}`
+}
+
+export function formatLatestBrlPrice(
+  price: LatestPrice | null | undefined,
+  unavailableLabel: string = 'BRL indisponível'
+): string {
+  if (!hasReliableBrlPrice(price)) {
+    return unavailableLabel
+  }
+
+  return `R$ ${formatPrice(parseFloat(price.price_brl), 'BRL')}`
 }
 
 /**

@@ -259,7 +259,6 @@ class CollectionLog(models.Model):
     
     class Status(models.TextChoices):
         SUCCESS = "success", "Success"
-        PARTIAL = "partial", "Partial Success"
         FAILED = "failed", "Failed"
 
     started_at = models.DateTimeField(auto_now_add=True)
@@ -270,7 +269,6 @@ class CollectionLog(models.Model):
         default=Status.SUCCESS
     )
     cryptos_processed = models.PositiveIntegerField(default=0)
-    cryptos_failed = models.PositiveIntegerField(default=0)
     error_message = models.TextField(blank=True)
     execution_time_ms = models.PositiveIntegerField(
         null=True,
