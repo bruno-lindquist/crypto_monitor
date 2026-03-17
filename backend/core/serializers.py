@@ -12,6 +12,25 @@ from datetime import timedelta
 from .models import Cryptocurrency, PriceHistory, PriceAlert, CollectionLog
 
 
+def build_latest_price_payload(obj):
+    """Return the latest price payload from annotations or model fallback."""
+    annotated_price_id = getattr(obj, "latest_price_record_id", None)
+    if annotated_price_id is not None:
+        return {
+            "price_usd": obj.latest_price_usd,
+            "price_brl": obj.latest_price_brl,
+            "is_brl_estimated": obj.latest_price_is_brl_estimated,
+            "change_24h": obj.latest_change_24h,
+            "volume_24h_usd": obj.latest_volume_24h_usd,
+            "collected_at": obj.latest_collected_at,
+        }
+
+    latest = obj.latest_price
+    if latest:
+        return latest
+    return None
+
+
 class PriceHistorySerializer(serializers.ModelSerializer):
     """Serializer for PriceHistory model."""
     
@@ -28,6 +47,7 @@ class PriceHistorySerializer(serializers.ModelSerializer):
             "cryptocurrency_symbol",
             "price_usd",
             "price_brl",
+            "is_brl_estimated",
             "market_cap_usd",
             "volume_24h_usd",
             "change_1h",
@@ -38,18 +58,49 @@ class PriceHistorySerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "collected_at"]
 
 
-class LatestPriceSerializer(serializers.ModelSerializer):
+class LatestPriceSerializer(serializers.Serializer):
     """Compact serializer for latest price data."""
-    
-    class Meta:
-        model = PriceHistory
-        fields = [
-            "price_usd",
-            "price_brl",
-            "change_24h",
-            "volume_24h_usd",
-            "collected_at",
-        ]
+
+    price_usd = serializers.DecimalField(max_digits=24, decimal_places=8)
+    price_brl = serializers.DecimalField(max_digits=24, decimal_places=2)
+    is_brl_estimated = serializers.BooleanField()
+    change_24h = serializers.DecimalField(
+        max_digits=10, decimal_places=4, allow_null=True
+    )
+    volume_24h_usd = serializers.DecimalField(
+        max_digits=30, decimal_places=2, allow_null=True
+    )
+    collected_at = serializers.DateTimeField()
+
+
+class CryptocurrencyListQuerySerializer(serializers.Serializer):
+    """Validation for cryptocurrency list query params."""
+
+    active = serializers.BooleanField(required=False)
+    search = serializers.CharField(required=False, allow_blank=True, max_length=100)
+
+
+class CryptocurrencyHistoryQuerySerializer(serializers.Serializer):
+    """Validation for cryptocurrency history query params."""
+
+    hours = serializers.IntegerField(required=False, default=24, min_value=1, max_value=168)
+
+
+class PriceHistoryQuerySerializer(serializers.Serializer):
+    """Validation for price history list query params."""
+
+    crypto = serializers.IntegerField(required=False, min_value=1)
+    symbol = serializers.CharField(required=False, allow_blank=True, max_length=10)
+    hours = serializers.IntegerField(required=False, min_value=1, max_value=168)
+    limit = serializers.IntegerField(required=False, min_value=1, max_value=500)
+
+
+class PriceAlertQuerySerializer(serializers.Serializer):
+    """Validation for alert list query params."""
+
+    crypto = serializers.IntegerField(required=False, min_value=1)
+    triggered = serializers.BooleanField(required=False)
+    active = serializers.BooleanField(required=False)
 
 
 class CryptocurrencyListSerializer(serializers.ModelSerializer):
@@ -70,7 +121,7 @@ class CryptocurrencyListSerializer(serializers.ModelSerializer):
         ]
     
     def get_latest_price(self, obj):
-        latest = obj.latest_price
+        latest = build_latest_price_payload(obj)
         if latest:
             return LatestPriceSerializer(latest).data
         return None
@@ -100,20 +151,27 @@ class CryptocurrencyDetailSerializer(serializers.ModelSerializer):
         ]
     
     def get_latest_price(self, obj):
-        latest = obj.latest_price
+        latest = build_latest_price_payload(obj)
         if latest:
             return LatestPriceSerializer(latest).data
         return None
     
     def get_price_history_24h(self, obj):
         """Returns price history for the last 24 hours."""
-        since = timezone.now() - timedelta(hours=24)
-        history = obj.price_history.filter(
-            collected_at__gte=since
-        ).order_by("collected_at")
+        history = getattr(obj, "prefetched_price_history_24h", None)
+        if history is None:
+            since = timezone.now() - timedelta(hours=24)
+            history = obj.price_history.filter(
+                collected_at__gte=since
+            ).order_by("collected_at")
         return PriceHistorySerializer(history, many=True).data
     
     def get_alerts_count(self, obj):
+        if hasattr(obj, "active_alerts_count") and hasattr(obj, "triggered_alerts_count"):
+            return {
+                "active": obj.active_alerts_count,
+                "triggered": obj.triggered_alerts_count,
+            }
         return {
             "active": obj.alerts.filter(is_active=True, is_triggered=False).count(),
             "triggered": obj.alerts.filter(is_triggered=True).count(),
@@ -180,6 +238,10 @@ class PriceAlertSerializer(serializers.ModelSerializer):
         ]
     
     def get_current_price(self, obj):
+        current_price = getattr(obj, "current_price_usd", None)
+        if current_price is not None:
+            return float(current_price)
+
         latest = obj.cryptocurrency.latest_price
         if latest:
             return float(latest.price_usd)
@@ -187,6 +249,12 @@ class PriceAlertSerializer(serializers.ModelSerializer):
     
     def get_distance_percent(self, obj):
         """Calculate percentage distance from current price to target."""
+        current_price = getattr(obj, "current_price_usd", None)
+        if current_price is not None and current_price > 0:
+            current = float(current_price)
+            target = float(obj.target_price)
+            return round(((target - current) / current) * 100, 2)
+
         latest = obj.cryptocurrency.latest_price
         if latest and latest.price_usd > 0:
             current = float(latest.price_usd)

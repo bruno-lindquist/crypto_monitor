@@ -14,7 +14,8 @@ export interface Cryptocurrency {
 
 export interface LatestPrice {
   price_usd: string
-  price_brl: string
+  price_brl: string | null
+  is_brl_estimated: boolean
   change_24h: string | null
   volume_24h_usd: string | null
   collected_at: string
@@ -25,7 +26,8 @@ export interface PriceHistory {
   cryptocurrency: number
   cryptocurrency_symbol: string
   price_usd: string
-  price_brl: string
+  price_brl: string | null
+  is_brl_estimated: boolean
   market_cap_usd: string | null
   volume_24h_usd: string | null
   change_1h: string | null

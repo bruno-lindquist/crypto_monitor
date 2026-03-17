@@ -36,32 +36,3 @@ export function useFetch<T>(
 
   return { data, isLoading, error, refetch: fetch }
 }
-
-/**
- * Custom hook for periodic data refresh.
- */
-export function useInterval(callback: () => void, delay: number | null) {
-  useEffect(() => {
-    if (delay === null) return
-
-    const id = setInterval(callback, delay)
-    return () => clearInterval(id)
-  }, [callback, delay])
-}
-
-/**
- * Custom hook combining fetch with auto-refresh.
- */
-export function useAutoRefresh<T>(
-  fetchFn: () => Promise<T>,
-  refreshInterval: number = 60000, // 1 minute default
-  deps: unknown[] = []
-) {
-  const { data, isLoading, error, refetch } = useFetch(fetchFn, deps)
-
-  useInterval(() => {
-    refetch()
-  }, refreshInterval)
-
-  return { data, isLoading, error, refetch }
-}

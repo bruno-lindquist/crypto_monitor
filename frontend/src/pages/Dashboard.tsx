@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { 
   Coins, 
@@ -17,6 +17,16 @@ import { dashboardApi, cryptoApi } from '../services/api'
 import { formatRelativeTime } from '../utils/format'
 import type { DashboardStats, Cryptocurrency } from '../types'
 
+const ENABLE_MANUAL_REFRESH = import.meta.env.VITE_ENABLE_MANUAL_REFRESH === 'true'
+const REFRESH_POLL_INTERVAL_MS = 2000
+const MAX_REFRESH_POLLS = 15
+
+function delay(ms: number) {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, ms)
+  })
+}
+
 export default function Dashboard() {
   const navigate = useNavigate()
   const [stats, setStats] = useState<DashboardStats | null>(null)
@@ -25,38 +35,64 @@ export default function Dashboard() {
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
+    const [statsData, cryptosData] = await Promise.all([
+      dashboardApi.getStats(),
+      cryptoApi.list({ active: true }),
+    ])
+    setStats(statsData)
+    setCryptos(cryptosData.results)
+    setError(null)
+    return { statsData, cryptosData }
+  }, [])
+
+  const loadData = useCallback(async () => {
     try {
-      const [statsData, cryptosData] = await Promise.all([
-        dashboardApi.getStats(),
-        cryptoApi.list({ active: true }),
-      ])
-      setStats(statsData)
-      setCryptos(cryptosData.results)
-      setError(null)
+      await fetchData()
     } catch (err) {
       setError('Erro ao carregar dados. Tente novamente.')
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [fetchData])
+
+  const waitForCollectionCompletion = useCallback(async (baselineCollectionId: number | null) => {
+    for (let attempt = 0; attempt < MAX_REFRESH_POLLS; attempt += 1) {
+      await delay(REFRESH_POLL_INTERVAL_MS)
+
+      const { statsData } = await fetchData()
+      const currentCollection = statsData.last_collection
+
+      if (!currentCollection) {
+        continue
+      }
+
+      const hasNewCollection =
+        baselineCollectionId === null || currentCollection.id !== baselineCollectionId
+
+      if (hasNewCollection && currentCollection.completed_at) {
+        return
+      }
+    }
+  }, [fetchData])
 
   useEffect(() => {
-    fetchData()
+    loadData()
     
     // Auto-refresh every 60 seconds
-    const interval = setInterval(fetchData, 60000)
+    const interval = setInterval(loadData, 60000)
     return () => clearInterval(interval)
-  }, [])
+  }, [loadData])
 
   const handleManualRefresh = async () => {
     setIsRefreshing(true)
     try {
+      const baselineCollectionId = stats?.last_collection?.id ?? null
       await dashboardApi.triggerFetch()
-      // Wait a bit for the task to process
-      setTimeout(fetchData, 2000)
+      await waitForCollectionCompletion(baselineCollectionId)
     } catch (err) {
       console.error('Error triggering refresh:', err)
+      setError('Nao foi possivel concluir a atualizacao manual.')
     } finally {
       setIsRefreshing(false)
     }
@@ -81,6 +117,14 @@ export default function Dashboard() {
     )
   }
 
+  const collectionState = !stats?.last_collection
+    ? 'waiting'
+    : !stats.last_collection.completed_at
+    ? 'running'
+    : stats.last_collection.status === 'success'
+    ? 'success'
+    : 'error'
+
   return (
     <div className="space-y-8">
       {/* Header */}
@@ -88,19 +132,23 @@ export default function Dashboard() {
         <div>
           <h1 className="text-2xl font-bold text-white">Dashboard</h1>
           <p className="text-slate-400 mt-1">
-            {stats?.last_collection
+            {collectionState === 'running'
+              ? 'Coleta em andamento...'
+              : stats?.last_collection
               ? `Última atualização: ${formatRelativeTime(stats.last_collection.completed_at || stats.last_collection.started_at)}`
               : 'Aguardando primeira coleta...'}
           </p>
         </div>
-        <button
-          onClick={handleManualRefresh}
-          disabled={isRefreshing}
-          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-800 text-white hover:bg-slate-700 transition-colors disabled:opacity-50"
-        >
-          <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
-          Atualizar
-        </button>
+        {ENABLE_MANUAL_REFRESH && (
+          <button
+            onClick={handleManualRefresh}
+            disabled={isRefreshing}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-800 text-white hover:bg-slate-700 transition-colors disabled:opacity-50"
+          >
+            <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+            Atualizar
+          </button>
+        )}
       </div>
 
       {/* Stats Grid */}
@@ -125,9 +173,23 @@ export default function Dashboard() {
         />
         <StatCard
           title="Status da Coleta"
-          value={stats?.last_collection?.status === 'success' ? 'OK' : 'Erro'}
+          value={
+            collectionState === 'waiting'
+              ? 'Aguardando'
+              : collectionState === 'running'
+              ? 'Coletando'
+              : collectionState === 'success'
+              ? 'OK'
+              : 'Erro'
+          }
           icon={Activity}
-          variant={stats?.last_collection?.status === 'success' ? 'success' : 'danger'}
+          variant={
+            collectionState === 'success'
+              ? 'success'
+              : collectionState === 'running' || collectionState === 'waiting'
+              ? 'warning'
+              : 'danger'
+          }
         />
       </div>
 

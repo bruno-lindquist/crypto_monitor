@@ -16,6 +16,7 @@ from celery import shared_task
 from django.conf import settings
 from django.utils import timezone
 from django.db import transaction
+from django.db.models import OuterRef, Subquery
 
 from .models import (
     Cryptocurrency,
@@ -157,7 +158,12 @@ def fetch_crypto_prices(self):
         # First, try to get detailed market data
         try:
             market_data = client.get_market_data(ids)
-            prices_created = _process_market_data(market_data, crypto_map)
+            brl_prices = client.get_prices(ids, vs_currencies="brl")
+            prices_created = _process_market_data(
+                market_data,
+                crypto_map,
+                brl_prices,
+            )
         except requests.RequestException as e:
             # Fallback to simple price endpoint
             logger.warning(f"Market data failed, using simple prices: {e}")
@@ -188,18 +194,24 @@ def fetch_crypto_prices(self):
         raise
 
 
-def _process_market_data(market_data: list[dict], crypto_map: dict) -> int:
+def _process_market_data(
+    market_data: list[dict],
+    crypto_map: dict,
+    brl_prices_data: dict,
+) -> int:
     """
     Process market data response and create PriceHistory records.
     
     Args:
         market_data: List of market data from CoinGecko
         crypto_map: Dict mapping CoinGecko IDs to Cryptocurrency objects
+        brl_prices_data: Dict of BRL prices from CoinGecko simple/price
         
     Returns:
         Number of price records created
     """
     prices_to_create = []
+    cryptos_to_update = []
     now = timezone.now()
     
     for coin in market_data:
@@ -212,17 +224,21 @@ def _process_market_data(market_data: list[dict], crypto_map: dict) -> int:
         # Update image URL if available
         if coin.get("image") and not crypto.image_url:
             crypto.image_url = coin["image"]
-            crypto.save(update_fields=["image_url"])
+            cryptos_to_update.append(crypto)
         
         # Create price history record
         current_price = coin.get("current_price")
-        if current_price is None:
+        brl_price = _safe_decimal(
+            brl_prices_data.get(coingecko_id, {}).get("brl")
+        )
+        if current_price is None or brl_price is None:
             continue
             
         prices_to_create.append(PriceHistory(
             cryptocurrency=crypto,
             price_usd=Decimal(str(current_price)),
-            price_brl=Decimal(str(current_price * 5.0)),  # Approximate BRL
+            price_brl=brl_price,
+            is_brl_estimated=False,
             market_cap_usd=_safe_decimal(coin.get("market_cap")),
             volume_24h_usd=_safe_decimal(coin.get("total_volume")),
             change_1h=_safe_decimal(coin.get("price_change_percentage_1h_in_currency")),
@@ -234,6 +250,9 @@ def _process_market_data(market_data: list[dict], crypto_map: dict) -> int:
     # Bulk create for efficiency
     if prices_to_create:
         PriceHistory.objects.bulk_create(prices_to_create)
+
+    if cryptos_to_update:
+        Cryptocurrency.objects.bulk_update(cryptos_to_update, ["image_url"])
     
     return len(prices_to_create)
 
@@ -262,6 +281,7 @@ def _process_simple_prices(prices_data: dict, crypto_map: dict) -> int:
             cryptocurrency=crypto,
             price_usd=Decimal(str(data.get("usd", 0))),
             price_brl=Decimal(str(data.get("brl", 0))),
+            is_brl_estimated=False,
             volume_24h_usd=_safe_decimal(data.get("usd_24h_vol")),
             change_24h=_safe_decimal(data.get("usd_24h_change")),
             market_cap_usd=_safe_decimal(data.get("usd_market_cap")),
@@ -309,6 +329,7 @@ def fetch_single_crypto(self, crypto_id: int):
                 cryptocurrency=crypto,
                 price_usd=Decimal(str(coin_data.get("usd", 0))),
                 price_brl=Decimal(str(coin_data.get("brl", 0))),
+                is_brl_estimated=False,
                 volume_24h_usd=_safe_decimal(coin_data.get("usd_24h_vol")),
                 change_24h=_safe_decimal(coin_data.get("usd_24h_change")),
                 market_cap_usd=_safe_decimal(coin_data.get("usd_market_cap")),
@@ -328,20 +349,24 @@ def check_price_alerts(self):
     
     This task is scheduled to run every minute via Celery Beat.
     """
+    latest_price_queryset = PriceHistory.objects.filter(
+        cryptocurrency_id=OuterRef("cryptocurrency_id")
+    ).order_by("-collected_at")
+
     alerts = PriceAlert.objects.filter(
         is_active=True,
         is_triggered=False,
-    ).select_related("cryptocurrency")
+    ).select_related("cryptocurrency").annotate(
+        current_price_usd=Subquery(latest_price_queryset.values("price_usd")[:1])
+    )
     
     triggered_count = 0
     
     for alert in alerts:
-        latest_price = alert.cryptocurrency.latest_price
-        
-        if not latest_price:
+        if alert.current_price_usd is None:
             continue
         
-        current_price = float(latest_price.price_usd)
+        current_price = float(alert.current_price_usd)
         
         if alert.check_trigger(current_price):
             triggered_count += 1

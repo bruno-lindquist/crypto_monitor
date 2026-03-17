@@ -7,18 +7,30 @@ alerts, and dashboard statistics.
 
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
+from rest_framework.permissions import AllowAny, IsAdminUser
 from rest_framework.response import Response
+from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 from django.db import models
 from django.utils import timezone
-from django.db.models import Prefetch, Subquery, OuterRef
 from datetime import timedelta
 
+from .access import filter_alerts_for_request, get_alert_token_hash_for_request
 from .models import Cryptocurrency, PriceHistory, PriceAlert, CollectionLog
+from .querysets import (
+    annotate_alerts_with_current_price,
+    annotate_cryptocurrencies_with_alert_counts,
+    annotate_cryptocurrencies_with_latest_price,
+    prefetch_cryptocurrency_history_24h,
+)
 from .serializers import (
     CryptocurrencyListSerializer,
     CryptocurrencyDetailSerializer,
     CryptocurrencyCreateSerializer,
+    CryptocurrencyListQuerySerializer,
+    CryptocurrencyHistoryQuerySerializer,
+    PriceHistoryQuerySerializer,
+    PriceAlertQuerySerializer,
     PriceHistorySerializer,
     PriceAlertSerializer,
     CollectionLogSerializer,
@@ -42,6 +54,19 @@ class CryptocurrencyViewSet(viewsets.ModelViewSet):
     """
     
     queryset = Cryptocurrency.objects.all()
+
+    def get_permissions(self):
+        if self.action in {"list", "retrieve", "history"}:
+            permission_classes = [AllowAny]
+        else:
+            permission_classes = [IsAdminUser]
+        return [permission() for permission in permission_classes]
+
+    def get_throttles(self):
+        if self.action == "refresh":
+            self.throttle_scope = "manual-fetch"
+            return [ScopedRateThrottle()]
+        return super().get_throttles()
     
     def get_serializer_class(self):
         if self.action == "list":
@@ -51,21 +76,30 @@ class CryptocurrencyViewSet(viewsets.ModelViewSet):
         return CryptocurrencyCreateSerializer
     
     def get_queryset(self):
-        queryset = Cryptocurrency.objects.all()
+        params = CryptocurrencyListQuerySerializer(data=self.request.query_params.dict())
+        params.is_valid(raise_exception=True)
+
+        queryset = annotate_cryptocurrencies_with_latest_price(
+            Cryptocurrency.objects.all()
+        )
+        validated = params.validated_data
         
         # Filter by active status
-        is_active = self.request.query_params.get("active")
-        if is_active is not None:
-            queryset = queryset.filter(is_active=is_active.lower() == "true")
+        if "active" in validated:
+            queryset = queryset.filter(is_active=validated["active"])
         
         # Search by symbol or name
-        search = self.request.query_params.get("search")
+        search = validated.get("search")
         if search:
             queryset = queryset.filter(
                 models.Q(symbol__icontains=search) |
                 models.Q(name__icontains=search)
             )
         
+        if self.action == "retrieve":
+            queryset = annotate_cryptocurrencies_with_alert_counts(queryset)
+            queryset = prefetch_cryptocurrency_history_24h(queryset)
+
         return queryset.order_by("symbol")
     
     @action(detail=True, methods=["post"])
@@ -82,10 +116,11 @@ class CryptocurrencyViewSet(viewsets.ModelViewSet):
     def history(self, request, pk=None):
         """Get price history for this cryptocurrency."""
         crypto = self.get_object()
+        params = CryptocurrencyHistoryQuerySerializer(data=request.query_params.dict())
+        params.is_valid(raise_exception=True)
         
         # Get time range from query params (default: 24 hours)
-        hours = int(request.query_params.get("hours", 24))
-        hours = min(hours, 168)  # Max 7 days
+        hours = params.validated_data["hours"]
         
         since = timezone.now() - timedelta(hours=hours)
         history = PriceHistory.objects.filter(
@@ -109,31 +144,37 @@ class PriceHistoryViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = PriceHistorySerializer
     
     def get_queryset(self):
+        params = PriceHistoryQuerySerializer(data=self.request.query_params.dict())
+        params.is_valid(raise_exception=True)
+
         queryset = PriceHistory.objects.all()
+        validated = params.validated_data
         
         # Filter by cryptocurrency
-        crypto_id = self.request.query_params.get("crypto")
+        crypto_id = validated.get("crypto")
         if crypto_id:
             queryset = queryset.filter(cryptocurrency_id=crypto_id)
         
-        crypto_symbol = self.request.query_params.get("symbol")
+        crypto_symbol = validated.get("symbol")
         if crypto_symbol:
             queryset = queryset.filter(
                 cryptocurrency__symbol__iexact=crypto_symbol
             )
         
         # Filter by time range
-        hours = self.request.query_params.get("hours")
+        hours = validated.get("hours")
         if hours:
-            since = timezone.now() - timedelta(hours=int(hours))
+            since = timezone.now() - timedelta(hours=hours)
             queryset = queryset.filter(collected_at__gte=since)
+
+        queryset = queryset.select_related("cryptocurrency").order_by("-collected_at")
         
         # Limit results
-        limit = self.request.query_params.get("limit")
+        limit = validated.get("limit")
         if limit:
-            queryset = queryset[:int(limit)]
+            queryset = queryset[:limit]
         
-        return queryset.select_related("cryptocurrency").order_by("-collected_at")
+        return queryset
 
 
 class PriceAlertViewSet(viewsets.ModelViewSet):
@@ -150,25 +191,55 @@ class PriceAlertViewSet(viewsets.ModelViewSet):
     """
     
     serializer_class = PriceAlertSerializer
+
+    def get_permissions(self):
+        if self.action in {"list", "retrieve", "create", "update", "partial_update", "destroy", "reset"}:
+            from .access import HasAlertClientTokenOrAdmin
+
+            permission_classes = [HasAlertClientTokenOrAdmin]
+        else:
+            permission_classes = [IsAdminUser]
+        return [permission() for permission in permission_classes]
+
+    def get_throttles(self):
+        if self.action == "create":
+            self.throttle_scope = "alert-create"
+            return [ScopedRateThrottle()]
+
+        if self.action in {"update", "partial_update", "destroy", "reset"}:
+            self.throttle_scope = "alert-manage"
+            return [ScopedRateThrottle()]
+
+        return super().get_throttles()
     
     def get_queryset(self):
-        queryset = PriceAlert.objects.all()
+        params = PriceAlertQuerySerializer(data=self.request.query_params.dict())
+        params.is_valid(raise_exception=True)
+
+        queryset = filter_alerts_for_request(
+            PriceAlert.objects.all(),
+            self.request,
+        )
+        queryset = annotate_alerts_with_current_price(queryset)
+        validated = params.validated_data
         
         # Filter by cryptocurrency
-        crypto_id = self.request.query_params.get("crypto")
+        crypto_id = validated.get("crypto")
         if crypto_id:
             queryset = queryset.filter(cryptocurrency_id=crypto_id)
         
         # Filter by status
-        is_triggered = self.request.query_params.get("triggered")
-        if is_triggered is not None:
-            queryset = queryset.filter(is_triggered=is_triggered.lower() == "true")
+        if "triggered" in validated:
+            queryset = queryset.filter(is_triggered=validated["triggered"])
         
-        is_active = self.request.query_params.get("active")
-        if is_active is not None:
-            queryset = queryset.filter(is_active=is_active.lower() == "true")
+        if "active" in validated:
+            queryset = queryset.filter(is_active=validated["active"])
         
         return queryset.select_related("cryptocurrency").order_by("-created_at")
+
+    def perform_create(self, serializer):
+        owner_token_hash = get_alert_token_hash_for_request(self.request)
+        serializer.save(owner_token_hash=owner_token_hash)
     
     @action(detail=True, methods=["post"])
     def reset(self, request, pk=None):
@@ -195,6 +266,7 @@ class CollectionLogViewSet(viewsets.ReadOnlyModelViewSet):
     
     queryset = CollectionLog.objects.all().order_by("-started_at")
     serializer_class = CollectionLogSerializer
+    permission_classes = [IsAdminUser]
 
 
 class DashboardView(APIView):
@@ -205,18 +277,21 @@ class DashboardView(APIView):
     - GET /api/dashboard/ - Get dashboard stats
     """
     
+    permission_classes = [AllowAny]
+
     def get(self, request):
         now = timezone.now()
         last_24h = now - timedelta(hours=24)
+        alerts_queryset = filter_alerts_for_request(PriceAlert.objects.all(), request)
         
         # Get basic counts
         total_cryptos = Cryptocurrency.objects.count()
         active_cryptos = Cryptocurrency.objects.filter(is_active=True).count()
-        total_alerts = PriceAlert.objects.count()
-        active_alerts = PriceAlert.objects.filter(
+        total_alerts = alerts_queryset.count()
+        active_alerts = alerts_queryset.filter(
             is_active=True, is_triggered=False
         ).count()
-        triggered_alerts_24h = PriceAlert.objects.filter(
+        triggered_alerts_24h = alerts_queryset.filter(
             triggered_at__gte=last_24h
         ).count()
         
@@ -224,24 +299,19 @@ class DashboardView(APIView):
         last_collection = CollectionLog.objects.first()
         
         # Get top gainers and losers (last 24h)
-        # Subquery to get the latest price for each crypto
-        latest_price_subquery = PriceHistory.objects.filter(
-            cryptocurrency=OuterRef("pk")
-        ).order_by("-collected_at").values("change_24h")[:1]
-        
-        cryptos_with_change = Cryptocurrency.objects.filter(
+        cryptos_with_change = annotate_cryptocurrencies_with_latest_price(
+            Cryptocurrency.objects.filter(
             is_active=True
-        ).annotate(
-            latest_change=Subquery(latest_price_subquery)
+            )
         ).exclude(
-            latest_change__isnull=True
+            latest_change_24h__isnull=True
         )
         
         top_gainers = list(
-            cryptos_with_change.order_by("-latest_change")[:5]
+            cryptos_with_change.order_by("-latest_change_24h")[:5]
         )
         top_losers = list(
-            cryptos_with_change.order_by("latest_change")[:5]
+            cryptos_with_change.order_by("latest_change_24h")[:5]
         )
         
         data = {
@@ -267,6 +337,10 @@ class ManualFetchView(APIView):
     - POST /api/fetch/ - Trigger manual price collection
     """
     
+    permission_classes = [IsAdminUser]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "manual-fetch"
+
     def post(self, request):
         task = fetch_crypto_prices.delay()
         return Response({

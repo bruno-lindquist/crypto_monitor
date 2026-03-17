@@ -11,6 +11,7 @@ interface CryptoCardProps {
 export default function CryptoCard({ crypto, onClick }: CryptoCardProps) {
   const price = crypto.latest_price
   const change24h = price?.change_24h ? parseFloat(price.change_24h) : null
+  const hasReliableBrlPrice = Boolean(price?.price_brl) && !price?.is_brl_estimated
 
   const isPositive = change24h !== null && change24h > 0
   const isNegative = change24h !== null && change24h < 0
@@ -67,7 +68,9 @@ export default function CryptoCard({ crypto, onClick }: CryptoCardProps) {
           {price ? formatPrice(parseFloat(price.price_usd)) : '-'}
         </p>
         <p className="text-sm text-slate-400">
-          {price ? `R$ ${formatPrice(parseFloat(price.price_brl), 'BRL')}` : '-'}
+          {price && hasReliableBrlPrice && price.price_brl
+            ? `R$ ${formatPrice(parseFloat(price.price_brl), 'BRL')}`
+            : 'BRL indisponível'}
         </p>
       </div>
     </div>

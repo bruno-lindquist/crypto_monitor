@@ -3,18 +3,38 @@ Django settings for Crypto Monitor project.
 """
 
 import os
+from django.core.exceptions import ImproperlyConfigured
 from pathlib import Path
+from corsheaders.defaults import default_headers
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+ENVIRONMENT = os.environ.get("ENVIRONMENT", "development")
+
+
+def env_bool(name: str, default: bool) -> bool:
+    return os.environ.get(name, str(default)).lower() == "true"
+
+
+def get_required_setting(name: str, debug_default: str | None = None) -> str:
+    value = os.environ.get(name)
+    if value:
+        return value
+
+    if DEBUG and debug_default is not None:
+        return debug_default
+
+    raise ImproperlyConfigured(
+        f"{name} environment variable is required when DEBUG is False."
+    )
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.environ.get(
-    "SECRET_KEY", "django-insecure-dev-key-change-in-production"
-)
-
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.environ.get("DEBUG", "True").lower() == "true"
+DEBUG = env_bool("DEBUG", ENVIRONMENT == "development")
+SECRET_KEY = get_required_setting(
+    "SECRET_KEY",
+    "django-insecure-dev-key-change-in-production",
+)
 
 ALLOWED_HOSTS = os.environ.get("ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
 
@@ -72,7 +92,7 @@ DATABASES = {
         "ENGINE": "django.db.backends.postgresql",
         "NAME": os.environ.get("POSTGRES_DB", "crypto_monitor"),
         "USER": os.environ.get("POSTGRES_USER", "postgres"),
-        "PASSWORD": os.environ.get("POSTGRES_PASSWORD", "postgres"),
+        "PASSWORD": get_required_setting("POSTGRES_PASSWORD", "postgres"),
         "HOST": os.environ.get("POSTGRES_HOST", "localhost"),
         "PORT": os.environ.get("POSTGRES_PORT", "5432"),
     }
@@ -111,11 +131,34 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 REST_FRAMEWORK = {
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
     "PAGE_SIZE": 50,
-    "DEFAULT_RENDERER_CLASSES": [
-        "rest_framework.renderers.JSONRenderer",
-        "rest_framework.renderers.BrowsableAPIRenderer",
+    "DEFAULT_AUTHENTICATION_CLASSES": [
+        "rest_framework.authentication.SessionAuthentication",
+        "rest_framework.authentication.BasicAuthentication",
     ],
+    "DEFAULT_PERMISSION_CLASSES": [
+        "rest_framework.permissions.AllowAny",
+    ],
+    "DEFAULT_THROTTLE_CLASSES": [
+        "rest_framework.throttling.AnonRateThrottle",
+        "rest_framework.throttling.UserRateThrottle",
+    ],
+    "DEFAULT_THROTTLE_RATES": {
+        "anon": os.environ.get("DRF_ANON_THROTTLE_RATE", "120/minute"),
+        "user": os.environ.get("DRF_USER_THROTTLE_RATE", "240/minute"),
+        "alert-create": os.environ.get("DRF_ALERT_CREATE_THROTTLE_RATE", "20/day"),
+        "alert-manage": os.environ.get("DRF_ALERT_MANAGE_THROTTLE_RATE", "60/hour"),
+        "manual-fetch": os.environ.get("DRF_MANUAL_FETCH_THROTTLE_RATE", "10/hour"),
+    },
+    "DEFAULT_RENDERER_CLASSES": (
+        ["rest_framework.renderers.JSONRenderer"]
+        + (["rest_framework.renderers.BrowsableAPIRenderer"] if DEBUG else [])
+    ),
 }
+
+ALERT_CLIENT_TOKEN_HEADER = os.environ.get(
+    "ALERT_CLIENT_TOKEN_HEADER",
+    "HTTP_X_ALERT_CLIENT_TOKEN",
+)
 
 # CORS settings
 CORS_ALLOWED_ORIGINS = os.environ.get(
@@ -123,6 +166,7 @@ CORS_ALLOWED_ORIGINS = os.environ.get(
 ).split(",")
 
 CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOW_HEADERS = [*default_headers, "x-alert-client-token"]
 
 # Celery Configuration
 CELERY_BROKER_URL = os.environ.get("CELERY_BROKER_URL", "amqp://guest:guest@localhost:5672//")

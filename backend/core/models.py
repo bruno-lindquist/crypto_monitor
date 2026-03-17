@@ -86,6 +86,11 @@ class PriceHistory(models.Model):
         validators=[MinValueValidator(0)],
         help_text="Price in BRL"
     )
+    is_brl_estimated = models.BooleanField(
+        default=False,
+        db_index=True,
+        help_text="Whether the stored BRL price is only an estimate",
+    )
     market_cap_usd = models.DecimalField(
         max_digits=30,
         decimal_places=2,
@@ -174,6 +179,13 @@ class PriceAlert(models.Model):
     note = models.TextField(
         blank=True,
         help_text="Optional note for this alert"
+    )
+    owner_token_hash = models.CharField(
+        max_length=64,
+        db_index=True,
+        blank=True,
+        default="",
+        help_text="Hashed anonymous client token used to manage this alert",
     )
     is_active = models.BooleanField(
         default=True,

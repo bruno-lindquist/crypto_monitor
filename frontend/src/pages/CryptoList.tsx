@@ -1,49 +1,27 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Search, Plus } from 'lucide-react'
 import CryptoCard from '../components/CryptoCard'
 import { PageLoader } from '../components/LoadingSpinner'
 import AlertForm from '../components/AlertForm'
+import { useFetch } from '../hooks/useFetch'
 import { cryptoApi, alertApi } from '../services/api'
 import type { Cryptocurrency, CreateAlertData } from '../types'
 
 export default function CryptoList() {
   const navigate = useNavigate()
-  const [cryptos, setCryptos] = useState<Cryptocurrency[]>([])
-  const [filteredCryptos, setFilteredCryptos] = useState<Cryptocurrency[]>([])
-  const [isLoading, setIsLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
   const [showAlertForm, setShowAlertForm] = useState(false)
   const [selectedCrypto, setSelectedCrypto] = useState<Cryptocurrency | undefined>()
-
-  useEffect(() => {
-    loadCryptos()
-  }, [])
-
-  useEffect(() => {
-    if (searchQuery) {
-      const filtered = cryptos.filter(
-        (c) =>
-          c.symbol.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          c.name.toLowerCase().includes(searchQuery.toLowerCase())
+  const { data, isLoading, error } = useFetch(() => cryptoApi.list(), [])
+  const cryptos = data?.results ?? []
+  const filteredCryptos = searchQuery
+    ? cryptos.filter(
+        (crypto) =>
+          crypto.symbol.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          crypto.name.toLowerCase().includes(searchQuery.toLowerCase())
       )
-      setFilteredCryptos(filtered)
-    } else {
-      setFilteredCryptos(cryptos)
-    }
-  }, [searchQuery, cryptos])
-
-  const loadCryptos = async () => {
-    try {
-      const data = await cryptoApi.list()
-      setCryptos(data.results)
-      setFilteredCryptos(data.results)
-    } catch (err) {
-      console.error('Error loading cryptos:', err)
-    } finally {
-      setIsLoading(false)
-    }
-  }
+    : cryptos
 
   const handleCreateAlert = async (data: CreateAlertData) => {
     await alertApi.create(data)
@@ -58,6 +36,14 @@ export default function CryptoList() {
 
   if (isLoading) {
     return <PageLoader />
+  }
+
+  if (error) {
+    return (
+      <div className="text-center py-12">
+        <p className="text-slate-500">Nao foi possivel carregar as criptomoedas.</p>
+      </div>
+    )
   }
 
   return (

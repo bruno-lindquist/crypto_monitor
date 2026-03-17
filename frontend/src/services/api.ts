@@ -15,6 +15,7 @@ import type {
 } from '../types'
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/api'
+const ALERT_CLIENT_STORAGE_KEY = 'crypto-monitor.alert-client-token'
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -31,6 +32,35 @@ api.interceptors.response.use(
     return Promise.reject(error)
   }
 )
+
+function createAlertClientToken() {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID()
+  }
+
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 18)}`
+}
+
+function getAlertClientToken() {
+  if (typeof window === 'undefined') {
+    return ''
+  }
+
+  const existing = window.localStorage.getItem(ALERT_CLIENT_STORAGE_KEY)
+  if (existing) {
+    return existing
+  }
+
+  const token = createAlertClientToken()
+  window.localStorage.setItem(ALERT_CLIENT_STORAGE_KEY, token)
+  return token
+}
+
+function getAlertClientHeaders() {
+  return {
+    'X-Alert-Client-Token': getAlertClientToken(),
+  }
+}
 
 /**
  * Cryptocurrency endpoints
@@ -97,31 +127,46 @@ export const priceApi = {
  */
 export const alertApi = {
   list: async (params?: { crypto?: number; triggered?: boolean; active?: boolean }) => {
-    const response = await api.get<PaginatedResponse<PriceAlert>>('/alerts/', { params })
+    const response = await api.get<PaginatedResponse<PriceAlert>>('/alerts/', {
+      params,
+      headers: getAlertClientHeaders(),
+    })
     return response.data
   },
 
   get: async (id: number) => {
-    const response = await api.get<PriceAlert>(`/alerts/${id}/`)
+    const response = await api.get<PriceAlert>(`/alerts/${id}/`, {
+      headers: getAlertClientHeaders(),
+    })
     return response.data
   },
 
   create: async (data: CreateAlertData) => {
-    const response = await api.post<PriceAlert>('/alerts/', data)
+    const response = await api.post<PriceAlert>('/alerts/', data, {
+      headers: getAlertClientHeaders(),
+    })
     return response.data
   },
 
   update: async (id: number, data: Partial<CreateAlertData>) => {
-    const response = await api.patch<PriceAlert>(`/alerts/${id}/`, data)
+    const response = await api.patch<PriceAlert>(`/alerts/${id}/`, data, {
+      headers: getAlertClientHeaders(),
+    })
     return response.data
   },
 
   delete: async (id: number) => {
-    await api.delete(`/alerts/${id}/`)
+    await api.delete(`/alerts/${id}/`, {
+      headers: getAlertClientHeaders(),
+    })
   },
 
   reset: async (id: number) => {
-    const response = await api.post<PriceAlert>(`/alerts/${id}/reset/`)
+    const response = await api.post<PriceAlert>(
+      `/alerts/${id}/reset/`,
+      undefined,
+      { headers: getAlertClientHeaders() }
+    )
     return response.data
   },
 }
@@ -131,7 +176,9 @@ export const alertApi = {
  */
 export const dashboardApi = {
   getStats: async () => {
-    const response = await api.get<DashboardStats>('/dashboard/')
+    const response = await api.get<DashboardStats>('/dashboard/', {
+      headers: getAlertClientHeaders(),
+    })
     return response.data
   },
 

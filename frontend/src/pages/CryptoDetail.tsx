@@ -18,6 +18,15 @@ import { formatPrice, formatPercent, formatCompact, formatDateTime } from '../ut
 import type { Cryptocurrency, PriceHistory, CreateAlertData } from '../types'
 
 type TimeRange = 1 | 6 | 24 | 48 | 168
+const ENABLE_MANUAL_REFRESH = import.meta.env.VITE_ENABLE_MANUAL_REFRESH === 'true'
+const REFRESH_POLL_INTERVAL_MS = 2000
+const MAX_REFRESH_POLLS = 15
+
+function delay(ms: number) {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, ms)
+  })
+}
 
 export default function CryptoDetail() {
   const { id } = useParams<{ id: string }>()
@@ -59,6 +68,34 @@ export default function CryptoDetail() {
     }
   }, [])
 
+  const refreshDisplayedData = useCallback(async (cryptoId: number, hours: number) => {
+    const [cryptoData, historyData] = await Promise.all([
+      cryptoApi.get(cryptoId),
+      cryptoApi.getHistory(cryptoId, hours),
+    ])
+    setCrypto(cryptoData)
+    setPriceHistory(historyData)
+    return cryptoData
+  }, [])
+
+  const waitForFreshPrice = useCallback(
+    async (cryptoId: number, previousCollectedAt: string | null, hours: number) => {
+      for (let attempt = 0; attempt < MAX_REFRESH_POLLS; attempt += 1) {
+        await delay(REFRESH_POLL_INTERVAL_MS)
+        const updatedCrypto = await refreshDisplayedData(cryptoId, hours)
+        const updatedCollectedAt = updatedCrypto.latest_price?.collected_at ?? null
+
+        if (
+          updatedCollectedAt !== null &&
+          updatedCollectedAt !== previousCollectedAt
+        ) {
+          return
+        }
+      }
+    },
+    [refreshDisplayedData]
+  )
+
   useEffect(() => {
     if (id) {
       loadCryptoData(parseInt(id))
@@ -75,11 +112,10 @@ export default function CryptoDetail() {
     if (!id) return
     setIsRefreshing(true)
     try {
-      await cryptoApi.refresh(parseInt(id))
-      setTimeout(() => {
-        loadCryptoData(parseInt(id))
-        loadPriceHistory(parseInt(id), selectedRange)
-      }, 2000)
+      const cryptoId = parseInt(id)
+      const previousCollectedAt = crypto?.latest_price?.collected_at ?? null
+      await cryptoApi.refresh(cryptoId)
+      await waitForFreshPrice(cryptoId, previousCollectedAt, selectedRange)
     } catch (err) {
       console.error('Error refreshing:', err)
     } finally {
@@ -99,6 +135,7 @@ export default function CryptoDetail() {
   const price = crypto.latest_price
   const change24h = price?.change_24h ? parseFloat(price.change_24h) : null
   const isPositive = change24h !== null && change24h >= 0
+  const hasReliableBrlPrice = Boolean(price?.price_brl) && !price?.is_brl_estimated
 
   return (
     <div className="space-y-6">
@@ -134,14 +171,16 @@ export default function CryptoDetail() {
         </div>
 
         <div className="flex gap-2">
-          <button
-            onClick={handleRefresh}
-            disabled={isRefreshing}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-800 text-white hover:bg-slate-700 transition-colors disabled:opacity-50"
-          >
-            <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
-            Atualizar
-          </button>
+          {ENABLE_MANUAL_REFRESH && (
+            <button
+              onClick={handleRefresh}
+              disabled={isRefreshing}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-800 text-white hover:bg-slate-700 transition-colors disabled:opacity-50"
+            >
+              <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+              Atualizar
+            </button>
+          )}
           <button
             onClick={() => setShowAlertForm(true)}
             className="flex items-center gap-2 px-4 py-2 rounded-lg gradient-primary text-white"
@@ -170,7 +209,9 @@ export default function CryptoDetail() {
             <span className="text-sm">Preço BRL</span>
           </div>
           <p className="text-2xl font-bold text-white">
-            R$ {price ? formatPrice(parseFloat(price.price_brl)) : '-'}
+            {price && hasReliableBrlPrice && price.price_brl
+              ? `R$ ${formatPrice(parseFloat(price.price_brl), 'BRL')}`
+              : 'Indisponível'}
           </p>
         </div>
 
