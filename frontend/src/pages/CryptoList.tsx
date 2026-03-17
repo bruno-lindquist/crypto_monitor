@@ -1,10 +1,9 @@
-import { useCallback, useDeferredValue, useState } from 'react'
+import { useDeferredValue, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Search, Plus } from 'lucide-react'
 import CryptoCard from '../components/CryptoCard'
 import { PageLoader } from '../components/LoadingSpinner'
 import AlertForm from '../components/AlertForm'
-import { useFetch } from '../hooks/useFetch'
 import { cryptoApi, alertApi } from '../services/api'
 import type { Cryptocurrency, CreateAlertData } from '../types'
 
@@ -13,15 +12,51 @@ export default function CryptoList() {
   const [searchQuery, setSearchQuery] = useState('')
   const [showAlertForm, setShowAlertForm] = useState(false)
   const [selectedCrypto, setSelectedCrypto] = useState<Cryptocurrency | undefined>()
+  const [cryptos, setCryptos] = useState<Cryptocurrency[]>([])
+  const [totalCryptos, setTotalCryptos] = useState(0)
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const deferredSearchQuery = useDeferredValue(searchQuery)
   const normalizedSearchQuery = deferredSearchQuery.trim()
-  const fetchCryptos = useCallback(
-    () => cryptoApi.list(normalizedSearchQuery ? { search: normalizedSearchQuery } : undefined),
-    [normalizedSearchQuery]
-  )
-  const { data, isLoading, error } = useFetch(fetchCryptos)
-  const cryptos = data?.results ?? []
-  const totalCryptos = data?.count ?? cryptos.length
+
+  useEffect(() => {
+    let isMounted = true
+
+    async function loadCryptos() {
+      setIsLoading(true)
+      setError(null)
+
+      try {
+        const data = await cryptoApi.list(
+          normalizedSearchQuery ? { search: normalizedSearchQuery } : undefined
+        )
+
+        if (!isMounted) {
+          return
+        }
+
+        setCryptos(data.results)
+        setTotalCryptos(data.count)
+      } catch (err) {
+        if (!isMounted) {
+          return
+        }
+
+        console.error('Error loading cryptocurrencies:', err)
+        setError('Nao foi possivel carregar as criptomoedas.')
+      } finally {
+        if (isMounted) {
+          setIsLoading(false)
+        }
+      }
+    }
+
+    void loadCryptos()
+
+    return () => {
+      isMounted = false
+    }
+  }, [normalizedSearchQuery])
 
   const handleCreateAlert = async (data: CreateAlertData) => {
     await alertApi.create(data)
@@ -41,7 +76,7 @@ export default function CryptoList() {
   if (error) {
     return (
       <div className="text-center py-12">
-        <p className="text-slate-500">Nao foi possivel carregar as criptomoedas.</p>
+        <p className="text-slate-500">{error}</p>
       </div>
     )
   }

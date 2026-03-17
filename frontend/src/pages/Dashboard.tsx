@@ -10,15 +10,27 @@ import {
   CheckCircle,
   AlertCircle,
 } from 'lucide-react'
-import StatCard from '../components/StatCard'
 import CryptoCard from '../components/CryptoCard'
 import { PageLoader } from '../components/LoadingSpinner'
 import { dashboardApi, cryptoApi } from '../services/api'
 import { formatRelativeTime } from '../utils/format'
-import { pollUntil } from '../utils/poll'
 import type { DashboardStats, Cryptocurrency } from '../types'
 
 const ENABLE_MANUAL_REFRESH = import.meta.env.VITE_ENABLE_MANUAL_REFRESH === 'true'
+const REFRESH_POLL_INTERVAL_MS = 2000
+const MAX_REFRESH_POLLS = 15
+const STAT_VARIANT_STYLES = {
+  default: 'bg-crypto-primary/20 text-crypto-primary',
+  success: 'bg-emerald-500/20 text-emerald-400',
+  danger: 'bg-red-500/20 text-red-400',
+  warning: 'bg-amber-500/20 text-amber-400',
+} as const
+
+function delay(ms: number) {
+  return new Promise<void>((resolve) => {
+    setTimeout(resolve, ms)
+  })
+}
 
 export default function Dashboard() {
   const navigate = useNavigate()
@@ -50,22 +62,23 @@ export default function Dashboard() {
   }, [fetchData])
 
   const waitForCollectionCompletion = useCallback(async (baselineCollectionId: number | null) => {
-    await pollUntil({
-      poll: async () => {
-        const { statsData } = await fetchData()
-        return statsData.last_collection
-      },
-      isComplete: (currentCollection) => {
-        if (!currentCollection) {
-          return false
-        }
+    for (let attempt = 0; attempt < MAX_REFRESH_POLLS; attempt += 1) {
+      await delay(REFRESH_POLL_INTERVAL_MS)
 
-        const hasNewCollection =
-          baselineCollectionId === null || currentCollection.id !== baselineCollectionId
+      const { statsData } = await fetchData()
+      const currentCollection = statsData.last_collection
 
-        return hasNewCollection && Boolean(currentCollection.completed_at)
-      },
-    })
+      if (!currentCollection) {
+        continue
+      }
+
+      const hasNewCollection =
+        baselineCollectionId === null || currentCollection.id !== baselineCollectionId
+
+      if (hasNewCollection && currentCollection.completed_at) {
+        return
+      }
+    }
   }, [fetchData])
 
   useEffect(() => {
@@ -116,6 +129,44 @@ export default function Dashboard() {
     : stats.last_collection.status === 'success'
     ? 'success'
     : 'error'
+  const statsCards = [
+    {
+      title: 'Criptomoedas',
+      value: stats?.active_cryptos || 0,
+      icon: Coins,
+      variant: 'default',
+    },
+    {
+      title: 'Alertas Ativos',
+      value: stats?.active_alerts || 0,
+      icon: Bell,
+      variant: 'warning',
+    },
+    {
+      title: 'Alertas Disparados (24h)',
+      value: stats?.triggered_alerts_24h || 0,
+      icon: CheckCircle,
+      variant: 'success',
+    },
+    {
+      title: 'Status da Coleta',
+      value:
+        collectionState === 'waiting'
+          ? 'Aguardando'
+          : collectionState === 'running'
+          ? 'Coletando'
+          : collectionState === 'success'
+          ? 'OK'
+          : 'Erro',
+      icon: Activity,
+      variant:
+        collectionState === 'success'
+          ? 'success'
+          : collectionState === 'running' || collectionState === 'waiting'
+          ? 'warning'
+          : 'danger',
+    },
+  ] as const
 
   return (
     <div className="space-y-8">
@@ -145,44 +196,19 @@ export default function Dashboard() {
 
       {/* Stats Grid */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard
-          title="Criptomoedas"
-          value={stats?.active_cryptos || 0}
-          icon={Coins}
-          variant="default"
-        />
-        <StatCard
-          title="Alertas Ativos"
-          value={stats?.active_alerts || 0}
-          icon={Bell}
-          variant="warning"
-        />
-        <StatCard
-          title="Alertas Disparados (24h)"
-          value={stats?.triggered_alerts_24h || 0}
-          icon={CheckCircle}
-          variant="success"
-        />
-        <StatCard
-          title="Status da Coleta"
-          value={
-            collectionState === 'waiting'
-              ? 'Aguardando'
-              : collectionState === 'running'
-              ? 'Coletando'
-              : collectionState === 'success'
-              ? 'OK'
-              : 'Erro'
-          }
-          icon={Activity}
-          variant={
-            collectionState === 'success'
-              ? 'success'
-              : collectionState === 'running' || collectionState === 'waiting'
-              ? 'warning'
-              : 'danger'
-          }
-        />
+        {statsCards.map(({ title, value, icon: Icon, variant }) => (
+          <div key={title} className="bg-crypto-dark rounded-xl p-4 border border-slate-800">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-sm text-slate-400 mb-1">{title}</p>
+                <p className="text-2xl font-bold text-white">{value}</p>
+              </div>
+              <div className={`p-3 rounded-lg ${STAT_VARIANT_STYLES[variant]}`}>
+                <Icon className="w-5 h-5" />
+              </div>
+            </div>
+          </div>
+        ))}
       </div>
 
       {/* Top Movers */}

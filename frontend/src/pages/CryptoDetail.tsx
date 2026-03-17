@@ -21,11 +21,18 @@ import {
   formatLatestUsdPrice,
   formatPercent,
 } from '../utils/format'
-import { pollUntil } from '../utils/poll'
 import type { Cryptocurrency, PriceHistory, CreateAlertData } from '../types'
 
 type TimeRange = 1 | 6 | 24 | 48 | 168
 const ENABLE_MANUAL_REFRESH = import.meta.env.VITE_ENABLE_MANUAL_REFRESH === 'true'
+const REFRESH_POLL_INTERVAL_MS = 2000
+const MAX_REFRESH_POLLS = 15
+
+function delay(ms: number) {
+  return new Promise<void>((resolve) => {
+    setTimeout(resolve, ms)
+  })
+}
 
 export default function CryptoDetail() {
   const { id } = useParams<{ id: string }>()
@@ -79,13 +86,18 @@ export default function CryptoDetail() {
 
   const waitForFreshPrice = useCallback(
     async (cryptoId: number, previousCollectedAt: string | null, hours: number) => {
-      await pollUntil({
-        poll: () => refreshDisplayedData(cryptoId, hours),
-        isComplete: (updatedCrypto) => {
-          const updatedCollectedAt = updatedCrypto.latest_price?.collected_at ?? null
-          return updatedCollectedAt !== null && updatedCollectedAt !== previousCollectedAt
-        },
-      })
+      for (let attempt = 0; attempt < MAX_REFRESH_POLLS; attempt += 1) {
+        await delay(REFRESH_POLL_INTERVAL_MS)
+        const updatedCrypto = await refreshDisplayedData(cryptoId, hours)
+        const updatedCollectedAt = updatedCrypto.latest_price?.collected_at ?? null
+
+        if (
+          updatedCollectedAt !== null &&
+          updatedCollectedAt !== previousCollectedAt
+        ) {
+          return
+        }
+      }
     },
     [refreshDisplayedData]
   )

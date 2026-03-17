@@ -1,856 +1,261 @@
-# 🪙 Crypto Monitor
+# Crypto Monitor
 
-Um **sistema completo de monitoramento de preços de criptomoedas em tempo real**, com coleta automatizada, histórico de preços, gráficos interativos e sistema de alertas personalizados.
+Crypto Monitor is a full-stack web application for tracking cryptocurrency prices, storing price history, showing market summaries, and managing price alerts.
 
-**Este é um projeto de estudos que demonstra boas práticas de desenvolvimento full-stack moderno.**
+The project has four main responsibilities:
 
----
+1. Collect cryptocurrency prices from CoinGecko on a schedule.
+2. Persist current and historical market data in PostgreSQL.
+3. Expose a REST API for dashboard, list, detail, history, alerts, and operational data.
+4. Provide a React frontend for browsing coins, viewing charts, and creating alerts.
 
-## 📖 Índice
+## What The Project Does
 
-1. [O que é este projeto?](#inicio)
-2. [O que este Projeto Faz](#o-que-este-projeto-faz)
-3. [Tecnologias Utilizadas](#tecnologias-utilizadas)
-4. [Arquitetura do Sistema](#arquitetura-do-sistema)
-5. [Começando Rapidamente (Docker)](#começando-rapidamente-docker)
-6. [Instalação Sem Docker](#instalação-sem-docker)
-7. [Uso do Sistema](#uso-do-sistema)
-8. [Estrutura de Pastas e Arquivos](#estrutura-de-pastas-e-arquivos)
-9. [Modelos de Dados](#modelos-de-dados)
-10. [Endpoints da API](#endpoints-da-api)
-11. [Tarefas Automáticas (Celery)](#tarefas-automáticas-celery)
-12. [Testes](#testes)
+The application monitors a predefined set of cryptocurrencies and keeps their market data updated over time.
 
----
+Main features:
 
-## Ínicio
+- Dashboard with summary metrics and top gainers/losers.
+- Cryptocurrency list with search and latest price snapshot.
+- Cryptocurrency detail page with price chart and manual refresh support.
+- Price alerts with create, list, delete, and reset flows.
+- Historical price storage for trend visualization.
+- Django Admin for operational management.
+- Scheduled background jobs for price collection, alert checking, and cleanup.
 
-### O que é este projeto?
+## How The Project Is Organized
 
-Este é um **sistema web completo** (frontend e backend) que monitora preços de criptomoedas. Ele funciona assim:
+The system is organized into four layers:
 
-1. **Coleta automática**: A cada 1 minuto, o sistema busca os preços mais recentes de 20 criptomoedas pela API CoinGecko
-2. **Armazena no banco**: Todos esses dados são salvos no banco de dados PostgreSQL
-3. **Mostra em tempo real**: O navegador exibe os dados em gráficos, cards e tabelas
-4. **Alertas automáticos**: Você pode criar alertas como "me avise quando o Bitcoin passar de $50.000"
+- Frontend: React application that renders the UI and calls the API.
+- Backend API: Django REST application that exposes the project data and actions.
+- Background processing: Celery workers and beat scheduler for periodic tasks.
+- Persistence and messaging: PostgreSQL stores data and RabbitMQ brokers background jobs.
 
-### Como é organizado?
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                    VOCÊ AQUI (seu navegador)                    │
-│                                                                 │
-│  Frontend React + TypeScript                                    │
-│  (Exibe gráficos, cards, alertas)                               │
-│  http://localhost:3000                                          │
-└─────────────────────────────────────────────────────────────────┘
-                              ↕
-                         (INTERNET)
-                              ↕
-┌─────────────────────────────────────────────────────────────────┐
-│                  SERVIDOR BACKEND (computador)                  │
-│                                                                 │
-│  ┌──────────────────────────────────────────────────────────┐   │
-│  │  Django REST API                                         │   │
-│  │  (Recebe pedidos do frontend e devolve dados)            │   │
-│  │  http://localhost:8000/api/                              │   │
-│  └──────────────────────────────────────────────────────────┘   │
-│                              ↕                                  │
-│  ┌──────────────────────────────────────────────────────────┐   │
-│  │  PostgreSQL (Banco de Dados)                             │   │
-│  │  (Guarda todos os preços, alertas, usuários)             │   │
-│  └──────────────────────────────────────────────────────────┘   │
-│                                                                 │
-│  ┌──────────────────────────────────────────────────────────┐   │
-│  │  Celery Worker (Tarefas de Fundo)                        │   │
-│  │  (A cada 1 minuto busca preços da CoinGecko)             │   │
-│  │  (Verifica alertas, limpa dados antigos)                 │   │
-│  └──────────────────────────────────────────────────────────┘   │
-│                              ↕                                  │
-│  ┌──────────────────────────────────────────────────────────┐   │
-│  │  RabbitMQ (Gerenciador de Filas)                         │   │
-│  │  (Coordena as tarefas de fundo)                          │   │
-│  └──────────────────────────────────────────────────────────┘   │
-│                              ↕                                  │
-│  ┌──────────────────────────────────────────────────────────┐   │
-│  │  CoinGecko API (Externo)                                 │   │
-│  │  (Fonte dos preços em tempo real)                        │   │
-│  └──────────────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────────────┘
-```
+## Technology Stack
 
----
+### Runtime And Infrastructure
 
-## O que este Projeto Faz
-
-✅ **Coleta de preços**: Busca automaticamente preços de 20 criptomoedas a cada 1 minuto  
-✅ **Histórico**: Armazena todos os preços no banco de dados  
-✅ **Dashboard**: Exibe uma página inicial com resumo dos principais dados  
-✅ **Lista de Criptos**: Mostra todas as criptomoedas com seus preços atuais  
-✅ **Detalhes**: Para cada cripto, mostra um gráfico com histórico de 24 horas  
-✅ **Alertas**: Você pode criar alertas como "me avise quando Bitcoin sair de X reais"  
-✅ **Painel Admin**: Gerencia tudo pelo Django Admin (usuários, criptos, alertas)  
-
----
-
-## Tecnologias Utilizadas
-
-### Backend (Servidor)
-
-| Tecnologia | O que é | Para que serve |
+| Technology | What it is | What it does in this project |
 |---|---|---|
-| **Python 3.11** | Linguagem de programação | Base de toda a lógica do servidor |
-| **Django 4.2** | Framework web em Python | Cria a estrutura principal (URLs, banco de dados, admin) |
-| **Django REST Framework** | Extensão do Django | Transforma os dados do banco em APIs JSON (o que o frontend consome) |
-| **Celery** | Processador de tarefas de fundo | Executa coleta de preços e verificação de alertas a cada minuto |
-| **RabbitMQ** | Gerenciador de filas | Coordena quais tarefas o Celery vai executar e em que ordem |
-| **PostgreSQL 15** | Banco de dados relacional | Armazena todas as informações (preços, alertas, usuários) |
-| **Gunicorn** | Servidor WSGI | Roda a aplicação Django em produção |
+| Bash | Unix shell scripting language | Runs the macOS startup helper script that waits for Docker and opens the frontend |
+| Python 3.11 | General-purpose programming language | Runs the backend, tasks, and management commands |
+| Django 4.2 | Python web framework | Provides the main backend application structure, ORM, admin, and settings system |
+| Django REST Framework | API framework for Django | Builds the REST API consumed by the frontend |
+| django-cors-headers | Django middleware package | Allows the frontend to call the backend across origins during development |
+| Celery | Distributed task queue | Runs asynchronous and scheduled jobs such as price collection and alert checks |
+| django-celery-beat | Celery schedule persistence extension | Included in the project dependencies for database-backed scheduling support |
+| django-celery-results | Celery result persistence extension | Included in the project dependencies for storing Celery task results in Django |
+| PostgreSQL 15 | Relational database | Stores cryptocurrencies, price history, alerts, and collection logs |
+| psycopg2-binary | PostgreSQL driver for Python | Connects Django to PostgreSQL |
+| RabbitMQ | Message broker | Queues Celery tasks between beat and workers |
+| Requests | Python HTTP client | Calls the external CoinGecko API from background tasks |
+| Gunicorn | Python WSGI server | Serves the Django application in containerized runtime |
+| Docker | Container runtime | Packages the services into reproducible environments |
+| Docker Compose | Multi-container orchestration tool | Starts database, broker, backend, worker, beat, and frontend together |
+| Nginx | Web server and reverse proxy | Serves the production frontend build and proxies `/api` requests |
+| CoinGecko API | External cryptocurrency market API | Supplies price, volume, and change data |
 
-### Frontend (Interface Web)
+### Frontend
 
-| Tecnologia | O que é | Para que serve |
+| Technology | What it is | What it does in this project |
 |---|---|---|
-| **React 18** | Biblioteca JavaScript | Cria a interface web interativa |
-| **TypeScript** | Extensão do JavaScript | Adiciona tipagem para evitar erros |
-| **Vite** | Ferramenta de build | Compila o código e oferece um servidor de desenvolvimento rápido |
-| **Tailwind CSS** | Framework CSS | Estiliza a interface com classes prontas |
-| **Recharts** | Biblioteca de gráficos | Cria gráficos interativos dos preços |
-| **React Router** | Navegação | Permite navegar entre páginas sem recarregar |
+| React 18 | UI library | Builds the application interface |
+| React DOM | React renderer for the browser | Mounts the React application into the browser DOM |
+| TypeScript | Typed superset of JavaScript | Adds static typing to the frontend code |
+| Vite | Frontend build and dev server tool | Runs the development server and builds the production frontend bundle |
+| @vitejs/plugin-react | Official Vite React plugin | Enables React Fast Refresh and JSX handling in Vite |
+| React Router | Client-side routing library | Handles navigation between dashboard, list, detail, and alerts pages |
+| Axios | HTTP client | Sends frontend requests to the backend API |
+| Recharts | Charting library | Renders the cryptocurrency history chart |
+| Lucide React | Icon library | Provides UI icons used across the application |
+| date-fns | Date utility library | Formats chart timestamps and other date values |
+| clsx | Conditional class helper | Simplifies conditional Tailwind class composition |
+| Tailwind CSS | Utility-first CSS framework | Styles the frontend UI |
+| PostCSS | CSS transformation tool | Processes Tailwind CSS during build |
+| Autoprefixer | PostCSS plugin | Adds vendor prefixes to compiled CSS |
 
-### Infraestrutura
+### Quality And Developer Tooling
 
-| Tecnologia | O que é | Para que serve |
+| Technology | What it is | What it does in this project |
 |---|---|---|
-| **Docker** | Containerização | Empacota tudo (banco, server, frontend) em "caixas" isoladas |
-| **Docker Compose** | Orquestração | Inicia todos os containers com um comando |
-| **Nginx** | Servidor web | Em produção, serve o frontend e direciona requisições para a API |
-
----
-
-## Arquitetura do Sistema
-
-### Fluxo de Dados Principal
-
-```
-1. A cada 60 segundos:
-   ├─ Celery Beat "acorda" e agendada uma tarefa
-   │
-2. Celery Worker pega a tarefa da fila RabbitMQ:
-   ├─ Conecta na API CoinGecko
-   ├─ Baixa os preços de BTC, ETH, USDT, etc.
-   │
-3. Salva os preços no PostgreSQL:
-   ├─ Tabela: price_history
-   ├─ Cada linha: 1 crypto, 1 preço, 1 horário
-   │
-4. Verifica alertas (a cada 60 segundos também):
-   ├─ Se BTC sair de X, marca como "disparado"
-   │
-5. Frontend pede dados via API:
-   ├─ GET /api/cryptos/ → lista todas
-   ├─ GET /api/cryptos/1/history/?hours=24 → histórico de 24h
-   │
-6. Frontend exibe em tempo real:
-   ├─ Gráficos atualizam a cada fetch
-   ├─ Cards mostram preço atual
-   ├─ Alertas aparecem quando disparam
-```
-
-### Componentes Principais
-
-**Backend:**
-- `config/`: Configurações globais do projeto
-- `core/`: Aplicação principal com modelos, API e tarefas
-
-**Frontend:**
-- `pages/`: Páginas do app (Dashboard, Lista, Detalhe, Alertas)
-- `components/`: Componentes reutilizáveis (Cards, Gráficos, Formulários)
-- `services/`: Cliente HTTP que faz requisições à API
-- `hooks/`: Funções auxiliares para buscar dados e auto-atualizar
-
----
-
-## Começando Rapidamente (Docker)
-
-### Pré-requisitos
-
-- **Docker**: [Instalar Docker](https://docs.docker.com/get-docker/)
-- **Docker Compose**: Geralmente vem com Docker (verifique com `docker-compose --version`)
-- **Git**: Para clonar o repositório
-
-### Passos (Windows, Mac ou Linux)
-
-```bash
-# 1. Entre na pasta do projeto
-cd /caminho/para/crypto_monitor
-
-# 2. Inicie todos os serviços
-docker-compose up -d
-
-# 3. Aguarde 10-15 segundos para tudo inicializar
-```
-
-### Acessar o Sistema
-
-- **Frontend (Interface Web)**: http://localhost:3000
-- **API (Dados)**: http://localhost:8000/api/
-- **Admin Django**: http://localhost:8000/admin/
-- **RabbitMQ Management**: http://localhost:15672 (user: `guest`, pass: `guest`)
-- **PostgreSQL**: localhost:5432 (user: `postgres`, pass: `postgres`)
-
-### Criar Superusuário (Admin)
-
-```bash
-# Abra o terminal na pasta do projeto
-docker-compose exec backend python manage.py createsuperuser
-
-# Digite seu usuário, email e senha
-# Depois acesse: http://localhost:8000/admin/
-```
-
-### Parar os Serviços
-
-```bash
-docker-compose down
-```
-
----
-
-## Instalação Sem Docker
-
-Use esta opção se quiser rodar tudo localmente no seu computador.
-
-### Pré-requisitos (Todos os SOs)
-
-Instale manualmente:
-- **Python 3.11**: [python.org](https://www.python.org/)
-- **Node.js 18+**: [nodejs.org](https://nodejs.org/)
-- **PostgreSQL 15**: [postgresql.org](https://www.postgresql.org/)
-- **RabbitMQ**: [rabbitmq.com](https://www.rabbitmq.com/)
-
-Verifique com:
-```bash
-python --version    # Deve ser 3.11+
-node --version      # Deve ser 18+
-psql --version      # PostgreSQL
-```
-
-### Instalação no Windows
-
-#### 1. Backend
-
-```powershell
-# Abra PowerShell e entre na pasta do projeto
-cd backend
-
-# Crie ambiente virtual
-python -m venv venv
-
-# Ative o ambiente
-.\venv\Scripts\activate
-
-# Instale dependências
-pip install -r requirements.txt
-
-# Configure variáveis de ambiente (PowerShell)
-$env:DEBUG = "True"
-$env:SECRET_KEY = "dev-secret-key-mude-em-producao"
-$env:POSTGRES_DB = "crypto_monitor"
-$env:POSTGRES_USER = "postgres"
-$env:POSTGRES_PASSWORD = "postgres"
-$env:POSTGRES_HOST = "localhost"
-$env:POSTGRES_PORT = "5432"
-$env:CELERY_BROKER_URL = "amqp://guest:guest@localhost:5672//"
-
-# Execute migrations (cria tabelas no banco)
-python manage.py migrate
-
-# Popula criptomoedas iniciais
-python manage.py seed_cryptos
-
-# Inicie o servidor
-python manage.py runserver
-```
-
-O servidor rodará em: http://localhost:8000
-
-#### 2. Celery Worker (em outro terminal PowerShell)
-
-```powershell
-cd backend
-.\venv\Scripts\activate
-
-celery -A config worker -l info
-```
-
-#### 3. Celery Beat (agendador) (em outro terminal PowerShell)
-
-```powershell
-cd backend
-.\venv\Scripts\activate
-
-celery -A config beat -l info
-```
-
-#### 4. Frontend (em outro terminal PowerShell)
-
-```powershell
-cd frontend
-
-npm install
-
-npm run dev
-```
-
-O frontend rodará em: http://localhost:3000
-
----
-
-### Instalação no Mac
-
-#### 1. Backend
-
-```bash
-# Entre na pasta do projeto
-cd backend
-
-# Crie ambiente virtual
-python3 -m venv venv
-
-# Ative o ambiente
-source venv/bin/activate
-
-# Instale dependências
-pip install -r requirements.txt
-
-# Configure variáveis de ambiente
-export DEBUG=True
-export SECRET_KEY=dev-secret-key-mude-em-producao
-export POSTGRES_DB=crypto_monitor
-export POSTGRES_USER=postgres
-export POSTGRES_PASSWORD=postgres
-export POSTGRES_HOST=localhost
-export POSTGRES_PORT=5432
-export CELERY_BROKER_URL=amqp://guest:guest@localhost:5672//
-
-# Execute migrations
-python manage.py migrate
-
-# Popula criptomoedas
-python manage.py seed_cryptos
-
-# Inicie o servidor
-python manage.py runserver
-```
-
-O servidor rodará em: http://localhost:8000
-
-#### 2. Celery Worker (em outro terminal)
-
-```bash
-cd backend
-source venv/bin/activate
-
-celery -A config worker -l info
-```
-
-#### 3. Celery Beat (agendador) (em outro terminal)
-
-```bash
-cd backend
-source venv/bin/activate
-
-celery -A config beat -l info
-```
-
-#### 4. Frontend (em outro terminal)
-
-```bash
-cd frontend
-
-npm install
-
-npm run dev
-```
-
-O frontend rodará em: http://localhost:3000
-
----
-
-## Uso do Sistema
-
-### 1. Dashboard
-
-- **URL**: http://localhost:3000
-- **O que mostra**: Resumo dos preços atuais de criptos principais
-- **Dados**: Preço em USD e BRL, variação de 1h/24h/7d
-
-### 2. Lista de Criptomoedas
-
-- **URL**: http://localhost:3000/cryptos
-- **O que mostra**: Tabela com todas as criptos monitoradas
-- **Ações**: Clique em uma cripto para ver detalhes
-
-### 3. Detalhes de uma Cripto
-
-- **URL**: http://localhost:3000/cryptos/:id
-- **O que mostra**: Gráfico com histórico de 24 horas
-- **Dados**: Preço, volume, market cap, mudanças percentuais
-
-### 4. Gerenciador de Alertas
-
-- **URL**: http://localhost:3000/alerts
-- **O que faz**: Cria alertas como "me avise quando Bitcoin sair de X"
-- **Condições**: Pode ser "acima de" ou "abaixo de"
-- **Disparo**: Quando o preço atinge o alvo, o alerta é marcado como "disparado"
-
-### 5. Painel Admin Django
-
-- **URL**: http://localhost:8000/admin/
-- **Login**: Use as credenciais do superusuário que você criou
-- **O que gerencia**:
-  - Usuários e permissões
-  - Criptomoedas (ativar/desativar)
-  - Alertas (ver todos os alertas)
-  - Logs de coleta
-
----
-
-## Estrutura de Pastas e Arquivos
-
-### Raiz do Projeto
-
-```
-crypto_monitor/
-├── docker-compose.yml              # Inicia tudo em desenvolvimento
-├── docker-compose.prod.yml         # Versão para produção
-├── README.md                        # Este arquivo
-├── backend/                         # Servidor Django
-└── frontend/                        # Interface React
-```
-
-### Backend (backend/)
-
-#### Configurações e Entrada
-
-```
-config/
-├── __init__.py                  # Inicializa Celery no Django
-├── settings.py                  # Configurações do projeto (BD, Apps, Security)
-├── urls.py                      # URLs principais (/admin, /api, /health)
-├── wsgi.py                      # Entrada para servidor de produção (Gunicorn)
-├── celery.py                    # Configura e agenda tarefas (a cada 1 min, etc)
-```
-
-**O que cada faz:**
-- `settings.py`: Define qual banco usar, quais apps estão ativos, middleware
-- `urls.py`: Define as rotas raiz (quando alguém acessa /admin, vai para admin Django)
-- `celery.py`: Define que a cada 60s o Celery vai executar `fetch_crypto_prices`
-- `wsgi.py`: É por onde o servidor de produção (Gunicorn) entra
-
-#### Aplicação Principal (core/)
-
-```
-core/
-├── __init__.py                  # Marca como pacote Python
-├── apps.py                      # Configuração do app Django
-├── models.py                    # Estrutura das tabelas no banco
-├── serializers.py               # Converte modelos para JSON (API)
-├── views.py                     # Endpoints da API (GET /cryptos, POST /alerts)
-├── urls.py                      # Rotas da API (/api/cryptos, /api/alerts)
-├── tasks.py                     # Tarefas Celery (busca preços, verifica alertas)
-├── admin.py                     # Painel Admin (o que aparece em /admin)
-├── tests.py                     # Testes automatizados
-├── management/
-│   └── commands/
-│       └── seed_cryptos.py      # Comando que popula 20 criptos iniciais
-└── migrations/
-    ├── __init__.py              # Marca como pacote
-    └── 0001_initial.py          # Primeira migração (cria tabelas)
-```
-
-**Entendendo cada arquivo:**
-
-- `models.py`: Define `Cryptocurrency`, `PriceHistory`, `PriceAlert`, `CollectionLog`
-- `serializers.py`: Diz como converter esses modelos para JSON que a API devolve
-- `views.py`: Endpoints como `GET /api/cryptos/` → retorna lista de criptos
-- `tasks.py`: Funções que o Celery executa (ex: `fetch_crypto_prices()`)
-- `admin.py`: O que você vê quando faz login em `/admin/`
-
-#### Outros Arquivos Backend
-
-```
-backend/
-├── manage.py                    # Script principal do Django
-├── requirements.txt             # Lista de dependências Python
-├── pytest.ini                   # Opções do pytest
-└── Dockerfile                   # Cria imagem Docker do backend
-```
-
-- `manage.py`: Você usa assim: `python manage.py migrate`, `python manage.py runserver`
-- `requirements.txt`: Arquivo de texto com `django==4.2`, `celery==5.3`, etc
-- `Dockerfile`: Receita para criar um container com tudo instalado
-
----
-
-### Frontend (frontend/)
-
-#### Configuração
-
-```
-frontend/
-├── package.json                 # Dependências JavaScript
-├── package-lock.json            # Lock file (versões exatas)
-├── vite.config.ts               # Configura Vite (proxy para /api)
-├── tsconfig.json                # Configuração TypeScript
-├── tailwind.config.js           # Cores e temas do Tailwind
-├── postcss.config.js            # Processa CSS (Tailwind)
-├── index.html                   # HTML base (carrega React aqui)
-├── Dockerfile.dev               # Dockerfile para desenvolvimento
-├── Dockerfile                   # Dockerfile para produção
-└── nginx.conf                   # Config Nginx (produção)
-```
-
-#### Código da Aplicação (src/)
-
-```
-src/
-├── main.tsx                     # Ponto de entrada (inicializa React)
-├── App.tsx                      # Rotas principais (Dashboard, List, Detail, Alerts)
-├── vite-env.d.ts                # Tipos do Vite
-├── index.css                    # Estilos globais
-├── types/
-│   └── index.ts                 # Tipos TypeScript (Crypto, Alert, etc)
-├── services/
-│   └── api.ts                   # Cliente HTTP (faz requisições à API)
-├── hooks/
-│   └── useFetch.ts              # Hook para carregar dados com loading/erro
-├── utils/
-│   ├── format.ts                # Funções auxiliares de formatação
-│   └── poll.ts                  # Polling assíncrono reutilizável
-├── components/                  # Componentes reutilizáveis
-│   ├── Layout.tsx               # Header e navegação
-│   ├── CryptoCard.tsx           # Card com info de 1 crypto
-│   ├── StatCard.tsx             # Card com estatísticas
-│   ├── PriceChart.tsx           # Gráfico (Recharts)
-│   ├── AlertForm.tsx            # Modal para criar alertas
-│   └── LoadingSpinner.tsx        # Spinner de carregamento
-└── pages/                       # Páginas completas
-    ├── Dashboard.tsx            # Página inicial
-    ├── CryptoList.tsx           # Lista de criptos
-    ├── CryptoDetail.tsx         # Detalhe de 1 crypto
-    └── Alerts.tsx               # Gerenciador de alertas
-```
-
-**Entendendo:**
-
-- `App.tsx`: Define as rotas (URL `/` → Dashboard, URL `/cryptos` → CryptoList)
-- `services/api.ts`: Cliente HTTP centralizado para as chamadas da API
-- `pages/`: Cada arquivo é uma página da web
-- `components/`: Blocos reutilizáveis (um card pode aparecer em vários lugares)
-
----
-
-## Modelos de Dados
-
-### Cryptocurrency
-
-Representa uma moeda que estamos monitorando.
-
-```
-╔═══════════════════════════════════╗
-║       Cryptocurrency              ║
-╠═══════════════════════════════════╣
-║ id (chave primária)               ║
-║ symbol: "BTC", "ETH", etc         ║
-║ name: "Bitcoin", "Ethereum"       ║
-║ coingecko_id: "bitcoin"           ║
-║ image_url: URL da logo            ║
-║ is_active: true/false             ║
-║ created_at: quando foi criado     ║
-║ updated_at: última atualização    ║
-╚═══════════════════════════════════╝
-```
-
-### PriceHistory
-
-Cada linha é um "snapshot" do preço de uma crypto em um momento.
-
-```
-╔═══════════════════════════════════╗
-║       PriceHistory                ║
-╠═══════════════════════════════════╣
-║ id (chave primária)               ║
-║ cryptocurrency_id (FK)            ║ → Qual crypto é?
-║ price_usd: 45000.50               ║
-║ price_brl: 234000.80              ║
-║ market_cap_usd: 1000000000000     ║
-║ volume_24h_usd: 50000000000       ║
-║ change_1h: -0.5%                  ║
-║ change_24h: +2.3%                 ║
-║ change_7d: -10.2%                 ║
-║ collected_at: 2026-01-26 13:45    ║ ← Quando foi coletado
-╚═══════════════════════════════════╝
-```
-
-A tabela `PriceHistory` cresce rapidamente! Cada 1 minuto, 20 criptos = 20 novas linhas.
-Depois de 30 dias, = 864.000 linhas (mas os dados antigos são deletados).
-
-### PriceAlert
-
-Um alerta que você cria.
-
-```
-╔═══════════════════════════════════╗
-║       PriceAlert                  ║
-╠═══════════════════════════════════╣
-║ id (chave primária)               ║
-║ cryptocurrency_id (FK)            ║ → Qual crypto?
-║ target_price: 50000               ║ → Em quanto?
-║ condition: "above" ou "below"     ║ → Acima ou abaixo?
-║ is_active: true/false             ║ → Está ligado?
-║ triggered: true/false             ║ → Já disparou?
-║ triggered_at: data/hora           ║ → Quando disparou?
-║ created_at: 2026-01-26            ║
-╚═══════════════════════════════════╝
-
-Exemplo:
-- Bitcoin, target 50000, "above" 
-  → Avisa quando Bitcoin sair acima de $50.000
-```
-
-### CollectionLog
-
-Registro de cada coleta de preços (para auditoria).
-
-```
-╔═══════════════════════════════════╗
-║       CollectionLog               ║
-╠═══════════════════════════════════╣
-║ id (chave primária)               ║
-║ status: "success", "error"        ║
-║ processed_count: 20               ║ → Quantas criptos?
-║ duration: 2.5                     ║ → Quanto tempo?
-║ error_message: null ou texto      ║ → Houve erro?
-║ collected_at: 2026-01-26 13:45    ║
-╚═══════════════════════════════════╝
-```
-
----
-
-## Endpoints da API
-
-A API expõe endpoints (URLs) que o frontend consome.
-
-### Criptomoedas
-
-```bash
-# Listar todas
-GET /api/cryptos/
-Resposta: [
-  { "id": 1, "symbol": "BTC", "name": "Bitcoin", "price_usd": 45000 },
-  { "id": 2, "symbol": "ETH", "name": "Ethereum", "price_usd": 2500 },
-  ...
-]
-
-# Detalhe de 1
-GET /api/cryptos/1/
-Resposta: { "id": 1, "symbol": "BTC", "name": "Bitcoin", ... }
-
-# Histórico de preços de 24 horas
-GET /api/cryptos/1/history/?hours=24
-Resposta: [
-  { "price_usd": 45000, "price_brl": 234000, "collected_at": "2026-01-26T13:45:00Z" },
-  { "price_usd": 45100, "price_brl": 234500, "collected_at": "2026-01-26T13:46:00Z" },
-  ...
-]
-
-# Forçar coleta de preços agora (não espera 1 minuto)
-POST /api/cryptos/1/refresh/
-Resposta: { "status": "collecting" }
-```
-
-### Alertas
-
-```bash
-# Listar todos os alertas
-GET /api/alerts/
-Resposta: [
-  { 
-    "id": 1, 
-    "cryptocurrency": "BTC", 
-    "target_price": 50000, 
-    "condition": "above",
-    "triggered": false 
-  },
-  ...
-]
-
-# Criar um alerta
-POST /api/alerts/
-Body: {
-  "cryptocurrency_id": 1,
-  "target_price": 50000,
-  "condition": "above"
-}
-Resposta: { "id": 1, "cryptocurrency": "BTC", ... }
-
-# Atualizar um alerta
-PATCH /api/alerts/1/
-Body: { "is_active": false }
-
-# Deletar um alerta
-DELETE /api/alerts/1/
-
-# Resetar um alerta disparado
-POST /api/alerts/1/reset/
-Resposta: { "triggered": false }
-```
-
-### Outros
-
-```bash
-# Verificar se o servidor está vivo
-GET /health/
-Resposta: { "status": "healthy", "service": "crypto-monitor-api" }
-
-# Dashboard (resumo)
-GET /api/dashboard/
-Resposta: {
-  "total_cryptos": 20,
-  "total_alerts": 5,
-  "active_alerts": 3,
-  "latest_prices": [...]
-}
-```
-
----
-
-## Tarefas Automáticas (Celery)
-
-Celery executa tarefas em segundo plano, sem bloquear o servidor.
-
-### O que acontece a cada 60 segundos?
-
-```
-┌─ Celery Beat ──────────────────────┐
-│ A cada 60 segundos:                │
-│  ├─ Agenda: "fetch_crypto_prices"  │
-│  └─ Agenda: "check_price_alerts"   │
-└────────────────────────────────────┘
-           ↓
-┌─ RabbitMQ (Fila) ──────────────────┐
-│ Tarefas agendadas ficam aqui       │
-└────────────────────────────────────┘
-           ↓
-┌─ Celery Worker ────────────────────┐
-│ Pega tarefa e executa              │
-│                                    │
-│ fetch_crypto_prices():             │
-│  1. Conecta em CoinGecko           │
-│  2. Busca preços de BTC, ETH...    │
-│  3. Salva no PostgreSQL            │
-│  4. Marca como concluída           │
-│                                    │
-│ check_price_alerts():              │
-│  1. Pega todos os alertas ativos   │
-│  2. Compara com preço atual        │
-│  3. Se atingiu alvo, dispara       │
-│  4. Envia notificação              │
-└────────────────────────────────────┘
-           ↓
-┌─ PostgreSQL ───────────────────────┐
-│ Dados salvos com sucesso           │
-└────────────────────────────────────┘
-```
-
-### Agendamentos (definidos em `backend/config/celery.py`)
-
-```python
-app.conf.beat_schedule = {
-    "fetch-crypto-prices-every-minute": {
-        "task": "core.tasks.fetch_crypto_prices",
-        "schedule": 60.0,  # A cada 60 segundos
-    },
-    "check-price-alerts-every-minute": {
-        "task": "core.tasks.check_price_alerts",
-        "schedule": 60.0,  # A cada 60 segundos
-    },
-    "cleanup-old-price-history-daily": {
-        "task": "core.tasks.cleanup_old_price_history",
-        "schedule": crontab(hour=3, minute=0),  # Todos os dias às 3:00 AM
-    },
-}
-```
-
-**O que cada faz:**
-
-1. **fetch_crypto_prices**: Busca os preços atuais na CoinGecko e salva
-2. **check_price_alerts**: Verifica se algum alerta foi acionado
-3. **cleanup_old_price_history**: Deleta dados com mais de 30 dias (economiza espaço)
-
----
-
-## Testes
-
-O projeto tem testes automatizados para garantir que tudo funciona.
-
-### Rodar os Testes
-
-```bash
-# Com Docker
-docker-compose exec backend pytest -v
-
-# Sem Docker (no seu computador)
-cd backend
-source venv/bin/activate  # ou .\venv\Scripts\activate no Windows
-pytest -v
-```
-
-**O que está sendo testado:**
-- Modelos (Cryptocurrency, PriceHistory, etc.)
-- Endpoints da API (GET, POST, etc.)
-- Tarefas Celery (fetch, alerts, cleanup)
-- Permissões (quem pode fazer o quê)
-
----
-
-## Resumo Rápido de Tecnologias
-
-### Por que usar cada uma?
-
-| Tecnologia | Problema que resolve |
+| Pytest | Python testing framework | Runs backend automated tests |
+| pytest-django | Django plugin for Pytest | Integrates Django settings, database, and test helpers |
+| pytest-cov | Coverage plugin for Pytest | Adds coverage reporting support |
+| Flake8 | Python linter | Checks Python style and common issues |
+| Black | Python formatter | Formats Python source code consistently |
+| isort | Import sorter for Python | Normalizes Python import ordering |
+| mypy | Static type checker for Python | Checks Python typing correctness |
+| django-stubs | Type stubs for Django | Improves static typing support for Django code |
+| @types/react | TypeScript type package for React | Provides static typing for React APIs in the frontend |
+| @types/react-dom | TypeScript type package for React DOM | Provides static typing for browser rendering APIs |
+| ESLint | JavaScript/TypeScript linter | Validates frontend code quality |
+| @typescript-eslint/parser | ESLint parser for TypeScript | Lets ESLint understand TypeScript syntax |
+| @typescript-eslint/eslint-plugin | ESLint rules for TypeScript | Adds TypeScript-specific lint rules |
+| eslint-plugin-react-hooks | ESLint plugin for React Hooks | Validates hook usage patterns |
+| eslint-plugin-react-refresh | ESLint plugin for React Fast Refresh | Prevents patterns that break hot reloading |
+
+
+## Project Structure
+
+### Root
+
+| Path | Purpose |
 |---|---|
-| **Django** | Sem framework, você precisaria criar URLs, banco, autenticação do zero |
-| **REST Framework** | Sem ele, você manualmente converteria objetos Python para JSON |
-| **Celery** | Sem ele, buscar preços a cada 1 min travaria o servidor (tudo seria sequencial) |
-| **RabbitMQ** | Sem ele, não teria um gerenciador de filas confiável |
-| **PostgreSQL** | Banco robusto, confiável, com indices para buscas rápidas |
-| **React** | Interface responsiva, atualiza sem recarregar, melhor UX |
-| **TypeScript** | Sem ele, JavaScript deixa você cometer erros que só aparecem em produção |
-| **Docker** | Sem ele, teria que instalar tudo manualmente (Python, BD, Node, RabbitMQ) |
+| `.gitignore` | Ignore rules for Python, Node, Docker, build, cache, and local environment artifacts |
+| `README.md` | Project documentation |
+| `docker-compose.yml` | Development stack definition |
+| `docker-compose.prod.yml` | Production-oriented stack definition |
+| `start_crypto_monitor.command` | macOS helper script that opens Docker and starts the stack |
 
----
+### Backend Root
 
-## Dúvidas Frequentes
+| Path | Purpose |
+|---|---|
+| `backend/manage.py` | Django command entry point |
+| `backend/Dockerfile` | Backend container build definition |
+| `backend/requirements.txt` | Python dependency list |
+| `backend/pytest.ini` | Pytest configuration for the backend |
 
-**P: Por que preciso do RabbitMQ?**  
-R: Para coordenar tarefas de fundo. Se você tem 100 tarefas agendadas, RabbitMQ garante que todas sejam executadas na ordem correta.
+### Backend Configuration
 
-**P: Por que Celery e não apenas um `setInterval` no JavaScript?**  
-R: `setInterval` é frágil. Se o navegador fecha, as tarefas param. Celery roda no servidor, independente.
+| Path | Purpose |
+|---|---|
+| `backend/config/__init__.py` | Django config package initializer |
+| `backend/config/settings.py` | Central Django settings, database config, REST config, Celery config, CORS, and logging |
+| `backend/config/urls.py` | Root URL configuration for admin, API, and health check |
+| `backend/config/wsgi.py` | WSGI entry point used by Gunicorn |
+| `backend/config/celery.py` | Celery app setup and periodic task schedule |
 
-**P: Posso usar SQLite em vez de PostgreSQL?**  
-R: Sim, mas PostgreSQL é mais robusto. SQLite é para teste, PostgreSQL para produção.
+### Backend Application
 
-**P: Como escalo o projeto?**  
-R: Com Docker, você pode rodar múltiplos workers Celery, múltiplas instâncias da API, e PostgreSQL com replicação.
+| Path | Purpose |
+|---|---|
+| `backend/core/__init__.py` | Core app package marker |
+| `backend/core/apps.py` | Django app configuration for `core` |
+| `backend/core/access.py` | Alert token handling and access control helpers |
+| `backend/core/admin.py` | Django Admin configuration for core models |
+| `backend/core/models.py` | Database models for cryptocurrencies, price history, alerts, and collection logs |
+| `backend/core/querysets.py` | Query helpers for annotated price data |
+| `backend/core/serializers.py` | API serializers and query parameter validators |
+| `backend/core/tasks.py` | Celery tasks for fetching prices, checking alerts, and cleaning old history |
+| `backend/core/tests.py` | Backend automated tests |
+| `backend/core/urls.py` | API router and endpoint registration |
+| `backend/core/views.py` | API viewsets and API views |
 
----
 
-## Créditos
+### Frontend Root
 
-Projeto de estudos desenvolvido como exemplo de arquitetura full-stack moderna.
+| Path | Purpose |
+|---|---|
+| `frontend/.eslintrc.json` | ESLint rules for the frontend codebase |
+| `frontend/package.json` | Frontend scripts and dependency manifest |
+| `frontend/package-lock.json` | Locked dependency graph for reproducible installs |
+| `frontend/index.html` | HTML entry file used by Vite |
+| `frontend/vite.config.ts` | Vite config, dev port, and API proxy |
+| `frontend/tsconfig.json` | Main TypeScript configuration |
+| `frontend/tsconfig.node.json` | TypeScript config for Vite/node-side files |
+| `frontend/tailwind.config.js` | Tailwind theme and content configuration |
+| `frontend/postcss.config.js` | PostCSS plugin configuration |
+| `frontend/Dockerfile.dev` | Development frontend container |
+| `frontend/Dockerfile` | Production frontend container build |
+| `frontend/nginx.conf` | Nginx config for serving the built SPA and proxying the API |
 
-**Tecnologias principais:** Python, Django, React, TypeScript, Docker, PostgreSQL, Celery
+### Frontend Application
+
+| Path | Purpose |
+|---|---|
+| `frontend/src/main.tsx` | React application bootstrap |
+| `frontend/src/App.tsx` | Router configuration |
+| `frontend/src/index.css` | Global styles and UI utility classes |
+| `frontend/src/vite-env.d.ts` | Frontend environment variable typings |
+| `frontend/src/services/api.ts` | Central API client and endpoint wrappers |
+| `frontend/src/types/index.ts` | Shared frontend types for API data |
+| `frontend/src/utils/format.ts` | Number, price, percentage, and date formatting helpers |
+
+### Frontend Components
+
+| Path | Purpose |
+|---|---|
+| `frontend/src/components/Layout.tsx` | Main shell, navigation, and layout wrapper |
+| `frontend/src/components/CryptoCard.tsx` | Reusable card for one cryptocurrency snapshot |
+| `frontend/src/components/PriceChart.tsx` | Price history chart component |
+| `frontend/src/components/AlertForm.tsx` | Alert creation modal/form |
+| `frontend/src/components/LoadingSpinner.tsx` | Generic loading UI |
+
+### Frontend Pages
+
+| Path | Purpose |
+|---|---|
+| `frontend/src/pages/Dashboard.tsx` | Summary dashboard with stats and top movers |
+| `frontend/src/pages/CryptoList.tsx` | Searchable cryptocurrency list |
+| `frontend/src/pages/CryptoDetail.tsx` | Single-coin detail view with chart and refresh action |
+| `frontend/src/pages/Alerts.tsx` | Alert management page |
+
+## API Surface
+
+Main routes exposed by the backend:
+
+- `GET /health/` — service health check.
+- `GET /api/cryptos/` — list cryptocurrencies.
+- `GET /api/cryptos/{id}/` — get one cryptocurrency.
+- `POST /api/cryptos/{id}/refresh/` — request a manual price refresh.
+- `GET /api/cryptos/{id}/history/?hours=24` — get chart history for one cryptocurrency.
+- `GET /api/dashboard/` — dashboard summary metrics.
+- `GET/POST /api/alerts/` — list and create alerts.
+- `GET/PATCH/DELETE /api/alerts/{id}/` — manage a specific alert.
+- `POST /api/alerts/{id}/reset/` — reactivate a triggered alert.
+- `GET /api/prices/` — generic price history endpoint.
+- `GET /api/logs/` — collection log endpoint for operational use.
+- `POST /api/fetch/` — manually trigger price collection.
+
+## Installation
+
+### Docker Compose
+
+Requirements:
+
+- Docker Desktop or Docker Engine
+- Docker Compose
+
+Start the full stack:
+
+```bash
+docker compose up -d --build
+```
+
+Stop the stack:
+
+```bash
+docker compose down
+```
+
+## Accessing The Application
+
+After the stack is running, the default endpoints are:
+
+| Service | URL |
+|---|---|
+| Frontend | `http://localhost:3000` |
+| Backend API | `http://localhost:8000/api/` |
+| Django Admin | `http://localhost:8000/admin/` |
+| Health Check | `http://localhost:8000/health/` |
+| RabbitMQ Management | `http://localhost:15672` |
+
+Default RabbitMQ credentials:
+
+- Username: `guest`
+- Password: `guest`
+
+## Creating A Superuser
+
+```bash
+docker compose exec backend python manage.py createsuperuser
+```
+
+Then open:
+
+```text
+http://localhost:8000/admin/
+```

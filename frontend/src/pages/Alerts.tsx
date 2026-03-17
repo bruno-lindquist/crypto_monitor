@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { 
   Bell, 
   Plus, 
@@ -11,10 +11,9 @@ import {
 } from 'lucide-react'
 import AlertForm from '../components/AlertForm'
 import { PageLoader } from '../components/LoadingSpinner'
-import { useFetch } from '../hooks/useFetch'
 import { alertApi, cryptoApi } from '../services/api'
 import { formatPrice, formatPercent, formatDateTime } from '../utils/format'
-import type { PriceAlert, CreateAlertData } from '../types'
+import type { Cryptocurrency, PriceAlert, CreateAlertData } from '../types'
 import clsx from 'clsx'
 
 type FilterType = 'all' | 'active' | 'triggered'
@@ -22,31 +21,45 @@ type FilterType = 'all' | 'active' | 'triggered'
 export default function Alerts() {
   const [filter, setFilter] = useState<FilterType>('all')
   const [showAlertForm, setShowAlertForm] = useState(false)
-  const fetchAlertsPage = useCallback(async () => {
-    const [alertsData, cryptosData] = await Promise.all([
-      alertApi.list(),
-      cryptoApi.list(),
-    ])
-    return {
-      alerts: alertsData.results,
-      cryptos: cryptosData.results,
+  const [alerts, setAlerts] = useState<PriceAlert[]>([])
+  const [cryptos, setCryptos] = useState<Cryptocurrency[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  const loadData = useCallback(async () => {
+    setIsLoading(true)
+    try {
+      const [alertsData, cryptosData] = await Promise.all([
+        alertApi.list(),
+        cryptoApi.list(),
+      ])
+
+      setAlerts(alertsData.results)
+      setCryptos(cryptosData.results)
+      setError(null)
+    } catch (err) {
+      console.error('Error loading alerts:', err)
+      setError('Nao foi possivel carregar os alertas.')
+    } finally {
+      setIsLoading(false)
     }
   }, [])
-  const { data, isLoading, error, refetch } = useFetch(fetchAlertsPage)
-  const alerts = data?.alerts ?? []
-  const cryptos = data?.cryptos ?? []
+
+  useEffect(() => {
+    void loadData()
+  }, [loadData])
 
   const handleCreateAlert = async (data: CreateAlertData) => {
     await alertApi.create(data)
     setShowAlertForm(false)
-    await refetch()
+    await loadData()
   }
 
   const handleDeleteAlert = async (id: number) => {
     if (!confirm('Tem certeza que deseja excluir este alerta?')) return
     try {
       await alertApi.delete(id)
-      await refetch()
+      await loadData()
     } catch (err) {
       console.error('Error deleting alert:', err)
     }
@@ -55,7 +68,7 @@ export default function Alerts() {
   const handleResetAlert = async (id: number) => {
     try {
       await alertApi.reset(id)
-      await refetch()
+      await loadData()
     } catch (err) {
       console.error('Error resetting alert:', err)
     }
@@ -80,7 +93,7 @@ export default function Alerts() {
   if (error) {
     return (
       <div className="text-center py-12">
-        <p className="text-slate-500">Nao foi possivel carregar os alertas.</p>
+        <p className="text-slate-500">{error}</p>
       </div>
     )
   }
