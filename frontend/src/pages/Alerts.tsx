@@ -11,8 +11,13 @@ import {
 } from 'lucide-react'
 import AlertForm from '../components/AlertForm'
 import { PageLoader } from '../components/LoadingSpinner'
-import { alertApi, cryptoApi } from '../services/api'
-import { formatPrice, formatPercent, formatDateTime } from '../utils/format'
+import { alertApi, cryptoApi, isApiRequestCanceled } from '../services/api'
+import {
+  formatPrice,
+  formatPercent,
+  formatDateTime,
+  parseNumericValue,
+} from '../utils/format'
 import type { Cryptocurrency, PriceAlert, CreateAlertData } from '../types'
 import clsx from 'clsx'
 
@@ -26,33 +31,48 @@ export default function Alerts() {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (signal?: AbortSignal) => {
     setIsLoading(true)
     try {
       const [alertsData, cryptosData] = await Promise.all([
-        alertApi.list(),
-        cryptoApi.list(),
+        alertApi.list(undefined, { signal }),
+        cryptoApi.list(undefined, { signal }),
       ])
 
-      setAlerts(alertsData.results)
-      setCryptos(cryptosData.results)
+      if (signal?.aborted) {
+        return
+      }
+
+      setAlerts(alertsData)
+      setCryptos(cryptosData)
       setError(null)
     } catch (err) {
+      if (isApiRequestCanceled(err) || signal?.aborted) {
+        return
+      }
+
       console.error('Error loading alerts:', err)
-      setError('Nao foi possivel carregar os alertas.')
+      setError('Não foi possível carregar os alertas.')
     } finally {
-      setIsLoading(false)
+      if (!signal?.aborted) {
+        setIsLoading(false)
+      }
     }
   }, [])
 
   useEffect(() => {
-    void loadData()
+    const controller = new AbortController()
+    void loadData(controller.signal)
+
+    return () => {
+      controller.abort()
+    }
   }, [loadData])
 
   const handleCreateAlert = async (data: CreateAlertData) => {
     await alertApi.create(data)
-    setShowAlertForm(false)
     await loadData()
+    setShowAlertForm(false)
   }
 
   const handleDeleteAlert = async (id: number) => {
@@ -100,7 +120,6 @@ export default function Alerts() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-white">Alertas de Preço</h1>
@@ -118,7 +137,6 @@ export default function Alerts() {
         </button>
       </div>
 
-      {/* Filters */}
       <div className="flex gap-2">
         {(['all', 'active', 'triggered'] as FilterType[]).map((f) => (
           <button
@@ -138,7 +156,6 @@ export default function Alerts() {
         ))}
       </div>
 
-      {/* Alerts List */}
       <div className="space-y-3">
         {filteredAlerts.length === 0 ? (
           <div className="text-center py-12 bg-crypto-dark rounded-xl border border-slate-800">
@@ -171,7 +188,6 @@ export default function Alerts() {
         )}
       </div>
 
-      {/* Alert Form Modal */}
       {showAlertForm && (
         <AlertForm
           cryptos={cryptos}
@@ -192,6 +208,8 @@ interface AlertCardProps {
 function AlertCard({ alert, onDelete, onReset }: AlertCardProps) {
   const isAbove = alert.condition === 'above'
   const distancePercent = alert.distance_percent
+  const targetPrice = parseNumericValue(alert.target_price)
+  const triggeredPrice = parseNumericValue(alert.triggered_price)
 
   return (
     <div
@@ -204,7 +222,6 @@ function AlertCard({ alert, onDelete, onReset }: AlertCardProps) {
     >
       <div className="flex items-start justify-between gap-4">
         <div className="flex items-start gap-3">
-          {/* Status Icon */}
           <div
             className={clsx(
               'p-2 rounded-lg',
@@ -224,7 +241,6 @@ function AlertCard({ alert, onDelete, onReset }: AlertCardProps) {
             )}
           </div>
 
-          {/* Alert Info */}
           <div>
             <div className="flex items-center gap-2">
               <h3 className="font-semibold text-white">
@@ -238,7 +254,7 @@ function AlertCard({ alert, onDelete, onReset }: AlertCardProps) {
             <p className="text-slate-400 mt-1">
               {isAbove ? 'Acima de' : 'Abaixo de'}{' '}
               <span className="text-white font-medium">
-                ${formatPrice(parseFloat(alert.target_price))}
+                {targetPrice === null ? '-' : `$${formatPrice(targetPrice)}`}
               </span>
             </p>
 
@@ -246,15 +262,14 @@ function AlertCard({ alert, onDelete, onReset }: AlertCardProps) {
               <p className="text-sm text-slate-500 mt-1">{alert.note}</p>
             )}
 
-            {/* Status Info */}
             <div className="flex items-center gap-4 mt-2 text-sm">
               {alert.is_triggered ? (
                 <span className="text-emerald-400 flex items-center gap-1">
                   <CheckCircle className="w-3 h-3" />
                   Disparado em {formatDateTime(alert.triggered_at!)}
-                  {alert.triggered_price && (
+                  {triggeredPrice !== null && (
                     <span className="text-slate-400 ml-1">
-                      @ ${formatPrice(parseFloat(alert.triggered_price))}
+                      @ ${formatPrice(triggeredPrice)}
                     </span>
                   )}
                 </span>
@@ -289,7 +304,6 @@ function AlertCard({ alert, onDelete, onReset }: AlertCardProps) {
           </div>
         </div>
 
-        {/* Actions */}
         <div className="flex items-center gap-2">
           {alert.is_triggered && (
             <button

@@ -4,23 +4,21 @@ import { Search, Plus } from 'lucide-react'
 import CryptoCard from '../components/CryptoCard'
 import { PageLoader } from '../components/LoadingSpinner'
 import AlertForm from '../components/AlertForm'
-import { cryptoApi, alertApi } from '../services/api'
+import { cryptoApi, alertApi, isApiRequestCanceled } from '../services/api'
 import type { Cryptocurrency, CreateAlertData } from '../types'
 
 export default function CryptoList() {
   const navigate = useNavigate()
   const [searchQuery, setSearchQuery] = useState('')
   const [showAlertForm, setShowAlertForm] = useState(false)
-  const [selectedCrypto, setSelectedCrypto] = useState<Cryptocurrency | undefined>()
   const [cryptos, setCryptos] = useState<Cryptocurrency[]>([])
-  const [totalCryptos, setTotalCryptos] = useState(0)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const deferredSearchQuery = useDeferredValue(searchQuery)
   const normalizedSearchQuery = deferredSearchQuery.trim()
 
   useEffect(() => {
-    let isMounted = true
+    const controller = new AbortController()
 
     async function loadCryptos() {
       setIsLoading(true)
@@ -28,24 +26,20 @@ export default function CryptoList() {
 
       try {
         const data = await cryptoApi.list(
-          normalizedSearchQuery ? { search: normalizedSearchQuery } : undefined
+          normalizedSearchQuery ? { search: normalizedSearchQuery } : undefined,
+          { signal: controller.signal }
         )
 
-        if (!isMounted) {
-          return
-        }
-
-        setCryptos(data.results)
-        setTotalCryptos(data.count)
+        setCryptos(data)
       } catch (err) {
-        if (!isMounted) {
+        if (isApiRequestCanceled(err) || controller.signal.aborted) {
           return
         }
 
         console.error('Error loading cryptocurrencies:', err)
-        setError('Nao foi possivel carregar as criptomoedas.')
+        setError('Não foi possível carregar as criptomoedas.')
       } finally {
-        if (isMounted) {
+        if (!controller.signal.aborted) {
           setIsLoading(false)
         }
       }
@@ -54,19 +48,13 @@ export default function CryptoList() {
     void loadCryptos()
 
     return () => {
-      isMounted = false
+      controller.abort()
     }
   }, [normalizedSearchQuery])
 
   const handleCreateAlert = async (data: CreateAlertData) => {
     await alertApi.create(data)
     setShowAlertForm(false)
-    setSelectedCrypto(undefined)
-  }
-
-  const openAlertForm = (crypto?: Cryptocurrency) => {
-    setSelectedCrypto(crypto)
-    setShowAlertForm(true)
   }
 
   if (isLoading) {
@@ -83,17 +71,18 @@ export default function CryptoList() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-white">Criptomoedas</h1>
           <p className="text-slate-400 mt-1">
-            {normalizedSearchQuery ? `${totalCryptos} resultados` : `${totalCryptos} criptomoedas monitoradas`}
+            {normalizedSearchQuery
+              ? `${cryptos.length} resultados`
+              : `${cryptos.length} criptomoedas monitoradas`}
           </p>
         </div>
 
         <button
-          onClick={() => openAlertForm()}
+          onClick={() => setShowAlertForm(true)}
           className="flex items-center gap-2 px-4 py-2 rounded-lg gradient-primary text-white font-medium"
         >
           <Plus className="w-4 h-4" />
@@ -101,7 +90,6 @@ export default function CryptoList() {
         </button>
       </div>
 
-      {/* Search */}
       <div className="relative">
         <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500" />
         <input
@@ -113,7 +101,6 @@ export default function CryptoList() {
         />
       </div>
 
-      {/* Crypto Grid */}
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
         {cryptos.map((crypto) => (
           <CryptoCard
@@ -134,16 +121,11 @@ export default function CryptoList() {
         </div>
       )}
 
-      {/* Alert Form Modal */}
       {showAlertForm && (
         <AlertForm
           cryptos={cryptos}
-          selectedCrypto={selectedCrypto}
           onSubmit={handleCreateAlert}
-          onClose={() => {
-            setShowAlertForm(false)
-            setSelectedCrypto(undefined)
-          }}
+          onClose={() => setShowAlertForm(false)}
         />
       )}
     </div>

@@ -1,19 +1,25 @@
-/**
- * Formatting utilities for the Crypto Monitor application.
- */
-
 import type { LatestPrice } from '../types'
 
-/**
- * Format a number as currency.
- */
+export function parseNumericValue(value: number | string | null | undefined): number | null {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : null
+  }
+
+  if (typeof value !== 'string' || value.trim() === '') {
+    return null
+  }
+
+  const parsed = Number.parseFloat(value)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
 export function formatPrice(
   value: number,
   currency: 'USD' | 'BRL' = 'USD',
   compact: boolean = false
 ): string {
   const locale = currency === 'BRL' ? 'pt-BR' : 'en-US'
-  
+
   if (compact && value >= 1000) {
     return new Intl.NumberFormat(locale, {
       notation: 'compact',
@@ -21,17 +27,14 @@ export function formatPrice(
     }).format(value)
   }
 
-  // For very small values (like some altcoins)
-  if (value < 0.01 && value > 0) {
+  if (value > 0 && value < 0.01) {
     return value.toFixed(8)
   }
 
-  // For small values
   if (value < 1) {
     return value.toFixed(4)
   }
 
-  // For regular values
   return new Intl.NumberFormat(locale, {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
@@ -49,7 +52,12 @@ export function formatLatestUsdPrice(price: LatestPrice | null | undefined): str
     return '-'
   }
 
-  return `$${formatPrice(parseFloat(price.price_usd))}`
+  const numericPrice = parseNumericValue(price.price_usd)
+  if (numericPrice === null) {
+    return '-'
+  }
+
+  return `$${formatPrice(numericPrice)}`
 }
 
 export function formatLatestBrlPrice(
@@ -60,20 +68,19 @@ export function formatLatestBrlPrice(
     return unavailableLabel
   }
 
-  return `R$ ${formatPrice(parseFloat(price.price_brl), 'BRL')}`
+  const numericPrice = parseNumericValue(price.price_brl)
+  if (numericPrice === null) {
+    return unavailableLabel
+  }
+
+  return `R$ ${formatPrice(numericPrice, 'BRL')}`
 }
 
-/**
- * Format a percentage value.
- */
 export function formatPercent(value: number): string {
   const sign = value >= 0 ? '+' : ''
   return `${sign}${value.toFixed(2)}%`
 }
 
-/**
- * Format a large number with abbreviation.
- */
 export function formatCompact(value: number): string {
   return new Intl.NumberFormat('en-US', {
     notation: 'compact',
@@ -81,9 +88,6 @@ export function formatCompact(value: number): string {
   }).format(value)
 }
 
-/**
- * Format a date relative to now.
- */
 export function formatRelativeTime(date: Date | string): string {
   const now = new Date()
   const target = new Date(date)
@@ -100,9 +104,6 @@ export function formatRelativeTime(date: Date | string): string {
   return target.toLocaleDateString('pt-BR')
 }
 
-/**
- * Format a date/time string.
- */
 export function formatDateTime(date: Date | string): string {
   return new Date(date).toLocaleString('pt-BR', {
     day: '2-digit',

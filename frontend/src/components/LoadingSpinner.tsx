@@ -6,15 +6,11 @@ interface LoadingSpinnerProps {
 }
 
 export default function LoadingSpinner({ size = 'md', text }: LoadingSpinnerProps) {
-  const sizeClasses = {
-    sm: 'w-4 h-4',
-    md: 'w-8 h-8',
-    lg: 'w-12 h-12',
-  }
+  const sizeClass = size === 'sm' ? 'w-4 h-4' : size === 'lg' ? 'w-12 h-12' : 'w-8 h-8'
 
   return (
     <div className="flex flex-col items-center justify-center gap-3">
-      <Loader2 className={`${sizeClasses[size]} animate-spin text-crypto-primary`} />
+      <Loader2 className={`${sizeClass} animate-spin text-crypto-primary`} />
       {text && <p className="text-sm text-slate-400">{text}</p>}
     </div>
   )

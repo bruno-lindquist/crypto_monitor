@@ -1,22 +1,20 @@
 import { useState } from 'react'
 import { X } from 'lucide-react'
 import type { Cryptocurrency, CreateAlertData } from '../types'
-import { formatPrice } from '../utils/format'
+import { formatPrice, parseNumericValue } from '../utils/format'
 
 interface AlertFormProps {
   cryptos: Cryptocurrency[]
-  selectedCrypto?: Cryptocurrency
   onSubmit: (data: CreateAlertData) => Promise<void>
   onClose: () => void
 }
 
 export default function AlertForm({
   cryptos,
-  selectedCrypto,
   onSubmit,
   onClose,
 }: AlertFormProps) {
-  const [cryptoId, setCryptoId] = useState(selectedCrypto?.id || cryptos[0]?.id || 0)
+  const [cryptoId, setCryptoId] = useState<number | null>(cryptos[0]?.id ?? null)
   const [targetPrice, setTargetPrice] = useState('')
   const [condition, setCondition] = useState<'above' | 'below'>('above')
   const [note, setNote] = useState('')
@@ -24,13 +22,13 @@ export default function AlertForm({
   const [error, setError] = useState('')
 
   const selectedCryptoData = cryptos.find((c) => c.id === cryptoId)
-  const currentPrice = selectedCryptoData?.latest_price?.price_usd
+  const currentPrice = parseNumericValue(selectedCryptoData?.latest_price?.price_usd)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
 
-    if (!cryptoId || !targetPrice) {
+    if (cryptoId === null || !targetPrice) {
       setError('Preencha todos os campos obrigatórios')
       return
     }
@@ -44,7 +42,6 @@ export default function AlertForm({
         condition,
         note,
       })
-      onClose()
     } catch (err) {
       setError('Erro ao criar alerta. Tente novamente.')
     } finally {
@@ -72,30 +69,37 @@ export default function AlertForm({
             </div>
           )}
 
-          {/* Cryptocurrency Select */}
           <div>
             <label className="block text-sm font-medium text-slate-400 mb-2">
               Criptomoeda
             </label>
             <select
-              value={cryptoId}
-              onChange={(e) => setCryptoId(Number(e.target.value))}
+              value={cryptoId ?? ''}
+              onChange={(e) => setCryptoId(e.target.value ? Number(e.target.value) : null)}
+              disabled={cryptos.length === 0}
               className="w-full px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white focus:outline-none focus:ring-2 focus:ring-crypto-primary"
             >
+              {cryptos.length === 0 && (
+                <option value="">Nenhuma criptomoeda disponível</option>
+              )}
               {cryptos.map((crypto) => (
                 <option key={crypto.id} value={crypto.id}>
                   {crypto.symbol} - {crypto.name}
                 </option>
               ))}
             </select>
+            {cryptos.length === 0 && (
+              <p className="mt-1 text-xs text-amber-400">
+                Não há criptomoedas disponíveis para criar um alerta.
+              </p>
+            )}
             {currentPrice && (
               <p className="mt-1 text-xs text-slate-500">
-                Preço atual: ${formatPrice(parseFloat(currentPrice))}
+                Preço atual: ${formatPrice(currentPrice)}
               </p>
             )}
           </div>
 
-          {/* Condition */}
           <div>
             <label className="block text-sm font-medium text-slate-400 mb-2">
               Condição
@@ -126,7 +130,6 @@ export default function AlertForm({
             </div>
           </div>
 
-          {/* Target Price */}
           <div>
             <label className="block text-sm font-medium text-slate-400 mb-2">
               Preço Alvo (USD)
@@ -146,7 +149,6 @@ export default function AlertForm({
             </div>
           </div>
 
-          {/* Note */}
           <div>
             <label className="block text-sm font-medium text-slate-400 mb-2">
               Nota (opcional)
@@ -160,10 +162,9 @@ export default function AlertForm({
             />
           </div>
 
-          {/* Submit Button */}
           <button
             type="submit"
-            disabled={isLoading}
+            disabled={isLoading || cryptos.length === 0}
             className="w-full py-3 rounded-lg gradient-primary text-white font-medium transition-opacity hover:opacity-90 disabled:opacity-50"
           >
             {isLoading ? 'Criando...' : 'Criar Alerta'}

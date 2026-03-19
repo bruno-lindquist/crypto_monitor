@@ -1,7 +1,13 @@
 import { TrendingUp, TrendingDown, Minus } from 'lucide-react'
 import clsx from 'clsx'
 import type { Cryptocurrency } from '../types'
-import { formatLatestBrlPrice, formatLatestUsdPrice, formatPercent } from '../utils/format'
+import CryptoAvatar from './CryptoAvatar'
+import {
+  formatLatestBrlPrice,
+  formatLatestUsdPrice,
+  formatPercent,
+  parseNumericValue,
+} from '../utils/format'
 
 interface CryptoCardProps {
   crypto: Cryptocurrency
@@ -10,7 +16,7 @@ interface CryptoCardProps {
 
 export default function CryptoCard({ crypto, onClick }: CryptoCardProps) {
   const price = crypto.latest_price
-  const change24h = price?.change_24h ? parseFloat(price.change_24h) : null
+  const change24h = parseNumericValue(price?.change_24h)
 
   const isPositive = change24h !== null && change24h > 0
   const isNegative = change24h !== null && change24h < 0
@@ -26,19 +32,7 @@ export default function CryptoCard({ crypto, onClick }: CryptoCardProps) {
     >
       <div className="flex items-start justify-between mb-3">
         <div className="flex items-center gap-3">
-          {crypto.image_url ? (
-            <img
-              src={crypto.image_url}
-              alt={crypto.name}
-              className="w-10 h-10 rounded-full"
-            />
-          ) : (
-            <div className="w-10 h-10 rounded-full bg-slate-700 flex items-center justify-center">
-              <span className="text-sm font-bold text-slate-400">
-                {crypto.symbol.slice(0, 2)}
-              </span>
-            </div>
-          )}
+          <CryptoAvatar crypto={crypto} size="sm" />
           <div>
             <h3 className="font-semibold text-white">{crypto.symbol}</h3>
             <p className="text-sm text-slate-400">{crypto.name}</p>

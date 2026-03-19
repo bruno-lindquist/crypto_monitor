@@ -17,11 +17,9 @@ const navItems = [
 export default function Layout() {
   return (
     <div className="min-h-screen bg-crypto-darker">
-      {/* Header */}
       <header className="bg-crypto-dark border-b border-slate-800">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
-            {/* Logo - Clickable to go home */}
             <Link to="/" className="flex items-center gap-3 hover:opacity-80 transition-opacity">
               <div className="p-2 rounded-lg gradient-primary">
                 <TrendingUp className="w-6 h-6 text-white" />
@@ -31,7 +29,6 @@ export default function Layout() {
               </span>
             </Link>
 
-            {/* Navigation */}
             <nav className="hidden md:flex items-center gap-1">
               {navItems.map(({ to, icon: Icon, label }) => (
                 <NavLink
@@ -52,7 +49,6 @@ export default function Layout() {
               ))}
             </nav>
 
-            {/* GitHub Link */}
             <a
               href="https://github.com/bruno-lindquist/crypto_monitor"
               target="_blank"
@@ -65,7 +61,6 @@ export default function Layout() {
         </div>
       </header>
 
-      {/* Mobile Navigation */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-crypto-dark border-t border-slate-800 z-50">
         <div className="flex items-center justify-around">
           {navItems.map(({ to, icon: Icon, label }) => (
@@ -88,7 +83,6 @@ export default function Layout() {
         </div>
       </nav>
 
-      {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 pb-24 md:pb-8">
         <Outlet />
       </main>

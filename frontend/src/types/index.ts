@@ -1,7 +1,3 @@
-/**
- * Type definitions for the Crypto Monitor application.
- */
-
 export interface Cryptocurrency {
   id: number
   symbol: string

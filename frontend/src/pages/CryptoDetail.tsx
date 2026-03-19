@@ -11,28 +11,31 @@ import {
   Clock,
 } from 'lucide-react'
 import PriceChart from '../components/PriceChart'
+import CryptoAvatar from '../components/CryptoAvatar'
 import AlertForm from '../components/AlertForm'
 import { PageLoader } from '../components/LoadingSpinner'
-import { cryptoApi, alertApi } from '../services/api'
+import { useAbortControllerRef } from '../hooks/useAbortControllerRef'
+import { cryptoApi, alertApi, isApiRequestCanceled } from '../services/api'
+import { pollUntil } from '../utils/async'
 import {
   formatCompact,
   formatDateTime,
   formatLatestBrlPrice,
   formatLatestUsdPrice,
   formatPercent,
+  parseNumericValue,
 } from '../utils/format'
 import type { Cryptocurrency, PriceHistory, CreateAlertData } from '../types'
 
 type TimeRange = 1 | 6 | 24 | 48 | 168
 const ENABLE_MANUAL_REFRESH = import.meta.env.VITE_ENABLE_MANUAL_REFRESH === 'true'
-const REFRESH_POLL_INTERVAL_MS = 2000
-const MAX_REFRESH_POLLS = 15
-
-function delay(ms: number) {
-  return new Promise<void>((resolve) => {
-    setTimeout(resolve, ms)
-  })
-}
+const TIME_RANGES: { value: TimeRange; label: string }[] = [
+  { value: 1, label: '1H' },
+  { value: 6, label: '6H' },
+  { value: 24, label: '24H' },
+  { value: 48, label: '48H' },
+  { value: 168, label: '7D' },
+]
 
 export default function CryptoDetail() {
   const { id } = useParams<{ id: string }>()
@@ -44,88 +47,114 @@ export default function CryptoDetail() {
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [selectedRange, setSelectedRange] = useState<TimeRange>(24)
   const [showAlertForm, setShowAlertForm] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const cryptoLoadRequest = useAbortControllerRef()
+  const historyLoadRequest = useAbortControllerRef()
+  const refreshRequest = useAbortControllerRef()
 
-  const timeRanges: { value: TimeRange; label: string }[] = [
-    { value: 1, label: '1H' },
-    { value: 6, label: '6H' },
-    { value: 24, label: '24H' },
-    { value: 48, label: '48H' },
-    { value: 168, label: '7D' },
-  ]
-
-  const loadCryptoData = useCallback(async (cryptoId: number) => {
+  const loadCryptoData = useCallback(async (cryptoId: number, signal?: AbortSignal) => {
     try {
-      const data = await cryptoApi.get(cryptoId)
+      const data = await cryptoApi.get(cryptoId, { signal })
+
+      if (signal?.aborted) {
+        return
+      }
+
       setCrypto(data)
     } catch (err) {
+      if (isApiRequestCanceled(err) || signal?.aborted) {
+        return
+      }
+
       console.error('Error loading crypto:', err)
       navigate('/cryptos')
     } finally {
-      setIsLoading(false)
+      if (!signal?.aborted) {
+        setIsLoading(false)
+      }
     }
   }, [navigate])
 
-  const loadPriceHistory = useCallback(async (cryptoId: number, hours: number) => {
+  const loadPriceHistory = useCallback(async (
+    cryptoId: number,
+    hours: number,
+    signal?: AbortSignal
+  ) => {
     try {
-      const data = await cryptoApi.getHistory(cryptoId, hours)
+      const data = await cryptoApi.getHistory(cryptoId, hours, { signal })
+
+      if (signal?.aborted) {
+        return
+      }
+
       setPriceHistory(data)
     } catch (err) {
+      if (isApiRequestCanceled(err) || signal?.aborted) {
+        return
+      }
+
       console.error('Error loading price history:', err)
     }
   }, [])
 
-  const refreshDisplayedData = useCallback(async (cryptoId: number, hours: number) => {
-    const [cryptoData, historyData] = await Promise.all([
-      cryptoApi.get(cryptoId),
-      cryptoApi.getHistory(cryptoId, hours),
-    ])
-    setCrypto(cryptoData)
-    setPriceHistory(historyData)
-    return cryptoData
-  }, [])
-
-  const waitForFreshPrice = useCallback(
-    async (cryptoId: number, previousCollectedAt: string | null, hours: number) => {
-      for (let attempt = 0; attempt < MAX_REFRESH_POLLS; attempt += 1) {
-        await delay(REFRESH_POLL_INTERVAL_MS)
-        const updatedCrypto = await refreshDisplayedData(cryptoId, hours)
-        const updatedCollectedAt = updatedCrypto.latest_price?.collected_at ?? null
-
-        if (
-          updatedCollectedAt !== null &&
-          updatedCollectedAt !== previousCollectedAt
-        ) {
-          return
-        }
-      }
-    },
-    [refreshDisplayedData]
-  )
+  useEffect(() => {
+    if (id) {
+      const controller = cryptoLoadRequest.replace()
+      void loadCryptoData(parseInt(id), controller.signal)
+    }
+  }, [cryptoLoadRequest, id, loadCryptoData])
 
   useEffect(() => {
     if (id) {
-      loadCryptoData(parseInt(id))
+      const controller = historyLoadRequest.replace()
+      void loadPriceHistory(parseInt(id), selectedRange, controller.signal)
     }
-  }, [id, loadCryptoData])
-
-  useEffect(() => {
-    if (id) {
-      loadPriceHistory(parseInt(id), selectedRange)
-    }
-  }, [id, selectedRange, loadPriceHistory])
+  }, [historyLoadRequest, id, selectedRange, loadPriceHistory])
 
   const handleRefresh = async () => {
     if (!id) return
+
+    const controller = refreshRequest.replace()
+
     setIsRefreshing(true)
+    setError(null)
     try {
       const cryptoId = parseInt(id)
       const previousCollectedAt = crypto?.latest_price?.collected_at ?? null
       await cryptoApi.refresh(cryptoId)
-      await waitForFreshPrice(cryptoId, previousCollectedAt, selectedRange)
+      const status = await pollUntil({
+        signal: controller.signal,
+        task: async () => {
+          const [cryptoData, historyData] = await Promise.all([
+            cryptoApi.get(cryptoId, { signal: controller.signal }),
+            cryptoApi.getHistory(cryptoId, selectedRange, { signal: controller.signal }),
+          ])
+
+          if (!controller.signal.aborted) {
+            setCrypto(cryptoData)
+            setPriceHistory(historyData)
+          }
+
+          return cryptoData.latest_price?.collected_at ?? null
+        },
+        until: (updatedCollectedAt) =>
+          updatedCollectedAt !== null && updatedCollectedAt !== previousCollectedAt,
+      })
+
+      if (status === 'timeout' && !controller.signal.aborted) {
+        setError('A atualização manual demorou mais do que o esperado.')
+      }
     } catch (err) {
+      if (isApiRequestCanceled(err) || controller.signal.aborted) {
+        return
+      }
+
       console.error('Error refreshing:', err)
+      setError('Não foi possível concluir a atualização manual.')
     } finally {
-      setIsRefreshing(false)
+      if (!controller.signal.aborted) {
+        setIsRefreshing(false)
+      }
     }
   }
 
@@ -139,12 +168,12 @@ export default function CryptoDetail() {
   }
 
   const price = crypto.latest_price
-  const change24h = price?.change_24h ? parseFloat(price.change_24h) : null
+  const change24h = parseNumericValue(price?.change_24h)
   const isPositive = change24h !== null && change24h >= 0
+  const volume24hUsd = parseNumericValue(price?.volume_24h_usd)
 
   return (
     <div className="space-y-6">
-      {/* Back Button */}
       <button
         onClick={() => navigate(-1)}
         className="flex items-center gap-2 text-slate-400 hover:text-white transition-colors"
@@ -153,22 +182,9 @@ export default function CryptoDetail() {
         Voltar
       </button>
 
-      {/* Header */}
       <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
         <div className="flex items-center gap-4">
-          {crypto.image_url ? (
-            <img
-              src={crypto.image_url}
-              alt={crypto.name}
-              className="w-16 h-16 rounded-full"
-            />
-          ) : (
-            <div className="w-16 h-16 rounded-full bg-slate-700 flex items-center justify-center">
-              <span className="text-2xl font-bold text-slate-400">
-                {crypto.symbol.slice(0, 2)}
-              </span>
-            </div>
-          )}
+          <CryptoAvatar crypto={crypto} size="lg" />
           <div>
             <h1 className="text-3xl font-bold text-white">{crypto.name}</h1>
             <p className="text-slate-400">{crypto.symbol}</p>
@@ -196,7 +212,6 @@ export default function CryptoDetail() {
         </div>
       </div>
 
-      {/* Price Info */}
       <div className="grid md:grid-cols-4 gap-4">
         <div className="bg-crypto-dark rounded-xl p-4 border border-slate-800">
           <div className="flex items-center gap-2 text-slate-400 mb-2">
@@ -238,17 +253,22 @@ export default function CryptoDetail() {
             <span className="text-sm">Volume 24h</span>
           </div>
           <p className="text-2xl font-bold text-white">
-            ${price?.volume_24h_usd ? formatCompact(parseFloat(price.volume_24h_usd)) : '-'}
+            {volume24hUsd === null ? '-' : `$${formatCompact(volume24hUsd)}`}
           </p>
         </div>
       </div>
 
-      {/* Chart */}
+      {error && (
+        <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+          {error}
+        </div>
+      )}
+
       <div className="bg-crypto-dark rounded-xl p-4 border border-slate-800">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold text-white">Histórico de Preços</h2>
           <div className="flex gap-1">
-            {timeRanges.map(({ value, label }) => (
+            {TIME_RANGES.map(({ value, label }) => (
               <button
                 key={value}
                 onClick={() => setSelectedRange(value)}
@@ -266,7 +286,6 @@ export default function CryptoDetail() {
         <PriceChart data={priceHistory} height={300} />
       </div>
 
-      {/* Last Update */}
       {price && (
         <div className="flex items-center gap-2 text-sm text-slate-500">
           <Clock className="w-4 h-4" />
@@ -274,11 +293,9 @@ export default function CryptoDetail() {
         </div>
       )}
 
-      {/* Alert Form Modal */}
       {showAlertForm && (
         <AlertForm
           cryptos={[crypto]}
-          selectedCrypto={crypto}
           onSubmit={handleCreateAlert}
           onClose={() => setShowAlertForm(false)}
         />

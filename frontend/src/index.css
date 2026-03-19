@@ -64,14 +64,6 @@ body {
   background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
 }
 
-.gradient-success {
-  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-}
-
-.gradient-danger {
-  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
-}
-
 /* Card hover effect */
 .card-hover {
   transition: transform 0.2s ease, box-shadow 0.2s ease;
